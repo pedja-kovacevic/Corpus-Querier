@@ -1,7 +1,7 @@
 
 # Corpus Querier
 
-**Corpus Querier** is a Python script designed to automate corpus querying tasks using APIs like Sketch Engine. It ensures efficient and fair querying of large datasets while strictly adhering to rate limits and fair use principles. This tool is ideal for linguists, researchers, and data analysts working with corpus data.
+**Corpus Querier** is a Python script designed to automate corpus querying tasks using open source NoSketch Engine API. It ensures efficient and fair querying of large datasets while strictly adhering to rate limits and fair use principles. This tool is ideal for linguists, researchers, and data analysts working with corpus data.
 
 ---
 
