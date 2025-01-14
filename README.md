@@ -44,15 +44,9 @@ Specify the columns to scan for queries (default: D, E, F, G, H, I, J).
 Results are saved in the output directory after processing each row.
 When daily limits are reached, results are saved, and the script pauses for 24 hours before resuming.
 
-Here’s the revised README.md and modifications to the code, ensuring it aligns strictly with fair use principles and removes references to "limitless" or VPN-based functionality. This version emphasizes adherence to rate limits and ethical practices.
-
-Revised README.md
-
 # Corpus Querier
 
-**Corpus Querier** is a Python script designed to automate corpus querying tasks using APIs like Sketch Engine. It ensures efficient and fair querying of large datasets while strictly adhering to rate limits and fair use principles. This tool is ideal for linguists, researchers, and data analysts working with corpus data.
 
----
 
 ## Features
 
