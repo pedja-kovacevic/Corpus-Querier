@@ -28,7 +28,9 @@ Usage
 Update the following file paths and query limits in the script if necessary:
 
 INPUT_FILE: Path to the Excel file containing queries.
+
 OUTPUT_BASE: Directory for saving outputs.
+
 MAX_QUERIES_PER_MINUTE, MAX_QUERIES_PER_HOUR, MAX_QUERIES_PER_DAY: Set API rate limits.
 
 2. Run the Script
@@ -56,10 +58,13 @@ Example:
 
 D	E	F
 example	[lemma="run"]	test
+
 Output
 The script generates an Excel file for each processing day:
 
 Example output file: corpus_query_results_YYYYMMDD.xlsx.
+
+
 Fair Use Commitment
 Corpus Querier is designed to promote ethical usage of corpus APIs:
 
@@ -68,7 +73,7 @@ Sustainability: Includes automated pausing mechanisms to align with fair use pri
 Transparency: Outputs progress and ensures all operations are consistent with service terms.
 
 License
-This project is licensed under the MIT License. Users are free to use the script for their own research purposes with proper attribution. Users must comply with the terms of service of any API or platform accessed using this script.
+This script is licensed under the MIT License. Users are free to use the script for their own research purposes with proper attribution. Users must comply with the terms of service of any API or platform accessed using this script.
 
 Cite as
 
