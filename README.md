@@ -201,4 +201,4 @@ This project is licensed under the MIT License. Users are free to use the script
 
 Cite as
 
-Kovačević, P. (2025). Corpus Querier: A Python script for automated corpus querying with fair use compliance (Version 1.0) [Computer software]. GitHub.
+Kovačević, P. (2025). Corpus Querier: A Python script for automated corpus querying with fair use compliance (Version 1.0) [Computer software]. GitHub. https://github.com/pedja-kovacevic/Corpus-Querier
