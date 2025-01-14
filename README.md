@@ -50,9 +50,11 @@ When daily limits are reached, results are saved, and the script pauses for 24 h
 
 
 Input File Format
+
 The input file should be an Excel sheet where:
 
 Each row represents a query set.
+
 Columns specified in the prompt contain queries in either plain text or CQL.
 
 Example:
@@ -61,12 +63,14 @@ D	E	F
 example	[lemma="run"]	test
 
 Output
+
 The script generates an Excel file for each processing day:
 
 Example output file: corpus_query_results_YYYYMMDD.xlsx.
 
 
 Fair Use Commitment
+
 Corpus Querier is designed to promote ethical usage of corpus APIs:
 
 Rate Limits: Fully complies with API-imposed rate limits to prevent excessive server load.
