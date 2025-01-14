@@ -34,6 +34,7 @@ OUTPUT_BASE: Directory for saving outputs.
 MAX_QUERIES_PER_MINUTE, MAX_QUERIES_PER_HOUR, MAX_QUERIES_PER_DAY: Set API rate limits.
 
 2. Run the Script
+
 Run the script from the terminal:
 python corpus_querier.py
 
