@@ -40,6 +40,7 @@ Provide the start and end rows for processing.
 Specify the columns to scan for queries (default: D, E, F, G, H, I, J).
 
 4. Results
+
 Results are saved in the output directory after processing each row.
 When daily limits are reached, results are saved, and the script pauses for 24 hours before resuming.
 
