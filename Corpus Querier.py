@@ -1,181 +1,150 @@
 import requests
+import json
 import pandas as pd
 import time
-import json
-from datetime import datetime
 
-# Constants
-API_URL = "https://www.clarin.si/noske/run.cgi/first"
-PROGRESS_FILE = "progress.json"  # For progress tracking
+API_KEY = "ADD-API-KEY"
+API_URL = "https://api.sketchengine.eu/bonito/run.cgi/view"
+CORPUS = "preloaded/srwac12"
+INPUT_FILE = "INPUT-FILE-LOCATION"
+OUTPUT_FILE = "OUTPUT-FILE-LOCATION"
 
-# Query limits
-MAX_QUERIES_PER_MINUTE = 95
-MAX_QUERIES_PER_HOUR = 850
-MAX_QUERIES_PER_DAY = 1950
+MAX_REQUESTS_PER_MINUTE = 100
+MAX_REQUESTS_PER_HOUR = 900
+MAX_REQUESTS_PER_DAY = 2000
 
-# File paths
-INPUT_FILE = "C://Users//Korisnik//Downloads//queries.xlsx"
-OUTPUT_BASE = "C://Users//Korisnik//Downloads//frequencies_day_"
+request_counts = {"minute": 0, "hour": 0, "day": 0}
+start_time_minute = time.time()
+start_time_hour = time.time()
+start_time_day = time.time()
+last_request_time = 0
 
-# Global settings
-plain_text_treatment = "word"  # Default: Treat plain text as word queries
+def fup_delay():
+    global request_counts, start_time_minute, start_time_hour, start_time_day, last_request_time
+    current_time = time.time()
 
-def query_concordance(query, corpus="srwac"):
-    """
-    Query concordance API for the frequency of a given query.
-    Automatically determines whether the query is plain text or CQL.
-    """
-    global plain_text_treatment
+    if current_time - start_time_minute >= 60:
+        request_counts["minute"] = 0
+        start_time_minute = current_time
+    if current_time - start_time_hour >= 3600:
+        request_counts["hour"] = 0
+        start_time_hour = current_time
+    if current_time - start_time_day >= 86400:
+        request_counts["day"] = 0
+        start_time_day = current_time
 
-    if query.strip().startswith("[") and query.strip().endswith("]"):
-        cql_query = query.strip()  # Assume it's a valid CQL query
-        print(f"Detected CQL query: {cql_query}")
-    else:
-        if plain_text_treatment == "word":
-            cql_query = f'[word="{query.strip()}"]'
-        elif plain_text_treatment == "lemma":
-            cql_query = f'[lemma="{query.strip()}"]'
-        else:
-            print("Error: Invalid plain text treatment setting.")
-            return 0
-        print(f"Detected plain text query: {cql_query}")
+    request_counts["minute"] += 1
+    request_counts["hour"] += 1
+    request_counts["day"] += 1
+
+    elapsed_since_last = current_time - last_request_time
+    if request_counts["minute"] > MAX_REQUESTS_PER_MINUTE and request_counts["hour"] <= MAX_REQUESTS_PER_HOUR:
+        wait_time = 4 - elapsed_since_last
+        if wait_time > 0:
+            time.sleep(wait_time)
+    elif request_counts["hour"] > MAX_REQUESTS_PER_HOUR:
+        wait_time = 45 - elapsed_since_last
+        if wait_time > 0:
+            time.sleep(wait_time)
+    elif request_counts["day"] > MAX_REQUESTS_PER_DAY:
+        raise RuntimeError("Daily API request limit reached. Please wait before continuing.")
+
+    last_request_time = time.time()
+
+def get_hits_for_query(query):
+    cql_query = f"q{query.strip()}"
+    json_query = {
+        "corpname": CORPUS,
+        "q": [cql_query, "r1"]
+    }
+    json_str = json.dumps(json_query)
 
     params = {
-        "corpname": corpus,
-        "queryselector": "cqlrow",
-        "cql": cql_query,
-        "default_attr": "word",
-        "pagesize": 1,
-        "format": "json",
+        "corpname": CORPUS,
+        "json": json_str,
+        "api_key": API_KEY,
+        "format": "json"
     }
 
-    try:
-        response = requests.get(API_URL, params=params, timeout=10)
-        response.raise_for_status()
+    fup_delay()
+
+    response = requests.get(API_URL, params=params)
+
+    if response.status_code == 429:
+        print("Too many requests: backing off for 60 seconds.")
+        time.sleep(60)
+        return get_hits_for_query(query)
+
+    if response.status_code == 200:
         data = response.json()
-        return data.get("concsize", 0)
-    except requests.RequestException as e:
-        print(f"Error querying API for '{query}': {e}")
-        return 0
+        total_hits = 0
+        if "Desc" in data:
+            for desc in data["Desc"]:
+                if "size" in desc:
+                    total_hits = desc["size"]
+                    break
+        return total_hits
+    else:
+        print(f"API call failed for query '{query}'. Status code: {response.status_code}")
+        return None
 
-def save_progress(last_row):
-    """Save the last processed row to a progress file."""
-    with open(PROGRESS_FILE, "w") as file:
-        json.dump({"last_row": last_row, "day": datetime.now().strftime("%Y-%m-%d")}, file)
-
-def process_spreadsheet(start_row, end_row, columns_to_scan):
-    """Process the spreadsheet within the specified range and update frequencies."""
+def main():
     try:
         df = pd.read_excel(INPUT_FILE)
-    except FileNotFoundError:
-        print(f"Error: File not found at {INPUT_FILE}")
+    except Exception as e:
+        print(f"Failed to load input file: {e}")
+        return
+
+    columns_input = input("Enter column names to scan, separated by commas (e.g. A,B,C): ").strip()
+    columns_to_scan = [col.strip() for col in columns_input.split(",") if col.strip()]
+    if not columns_to_scan:
+        print("No valid columns specified.")
+        return
+
+    start_row = input("Enter starting row number (1-based index): ").strip()
+    end_row = input("Enter ending row number (1-based index): ").strip()
+    try:
+        start_row = int(start_row)
+        end_row = int(end_row)
+        if start_row < 1 or end_row < start_row:
+            print("Invalid row range.")
+            return
+    except ValueError:
+        print("Invalid row input.")
         return
 
     for col in columns_to_scan:
         if col not in df.columns:
-            print(f"Error: Column '{col}' not found in the input file.")
+            print(f"Column '{col}' not found in the spreadsheet.")
             return
 
-    query_count_minute = query_count_hour = query_count_day = 0
-    start_time = time.time()
-
-    for index in range(start_row - 1, end_row):
+    # Calculate total queries to process
+    total_queries = 0
+    for idx in range(start_row - 1, min(end_row, len(df))):
         for col in columns_to_scan:
-            query = df.at[index, col]
-            if pd.isna(query) or not isinstance(query, str):
-                print(f"Skipping invalid query in row {index + 1}, column {col}.")
+            query = df.at[idx, col]
+            if pd.isna(query) or not isinstance(query, str) or not query.strip():
+                continue
+            total_queries += 1
+
+    completed_queries = 0
+    for idx in range(start_row - 1, min(end_row, len(df))):
+        for col in columns_to_scan:
+            query = df.at[idx, col]
+            if pd.isna(query) or not isinstance(query, str) or not query.strip():
                 continue
 
-            abs_freq = query_concordance(query)
-            df.at[index, col] = abs_freq
-            query_count_minute += 1
-            query_count_hour += 1
-            query_count_day += 1
+            hits = get_hits_for_query(query.strip())
+            df.at[idx, col] = hits
 
-            elapsed = time.time() - start_time
-            if query_count_minute >= MAX_QUERIES_PER_MINUTE and elapsed < 60:
-                print(f"Minute limit reached. Pausing for {60 - elapsed:.2f} seconds.")
-                time.sleep(60 - elapsed)
-                query_count_minute = 0
-                start_time = time.time()
+            completed_queries += 1
+            print(f"Processed {completed_queries} out of {total_queries} queries.")
 
-            if query_count_hour >= MAX_QUERIES_PER_HOUR:
-                print("Hourly limit reached. Pausing for 1 hour.")
-                time.sleep(3600)
-                query_count_hour = 0
-
-            if query_count_day >= MAX_QUERIES_PER_DAY:
-                day_output = OUTPUT_BASE + f"{datetime.now().strftime('%Y%m%d')}.xlsx"
-                df.to_excel(day_output, index=False)
-                save_progress(index + 1)
-                print(f"Daily limit reached. Results saved to {day_output}. Pausing for 24 hours.")
-                time.sleep(86400)
-                query_count_day = 0
-
-        save_progress(index + 1)
-
-    day_output = OUTPUT_BASE + f"{datetime.now().strftime('%Y%m%d')}.xlsx"
-    df.to_excel(day_output, index=False)
-    print(f"Processing complete. Results saved to {day_output}.")
-
-def main():
-    """Main function to execute the program."""
-    global plain_text_treatment
-
-    print("CORPUS QUERIER")
-    print("1. Treat plain text as word queries")
-    print("2. Treat plain text as lemma queries")
-    while True:
-        choice = input("Enter 1 or 2: ").strip()
-        if choice in {"1", "2"}:
-            plain_text_treatment = "word" if choice == "1" else "lemma"
-            break
-        print("Invalid choice. Please enter 1 or 2.")
-
-    resume_prompt = input("Do you want to resume from the last saved progress? (yes/no): ").strip().lower()
-    if resume_prompt == "yes":
-        try:
-            with open(PROGRESS_FILE, "r") as file:
-                progress = json.load(file)
-                start_row = progress.get("last_row", 1)
-                print(f"Resuming from row {start_row}.")
-        except FileNotFoundError:
-            print("No progress file found. Starting fresh.")
-            start_row = None
-    else:
-        print("Starting fresh.")
-        start_row = None
-
-    while start_row is None:
-        try:
-            start_row = int(input("Enter the starting row (1-based index): ").strip())
-            if start_row < 1:
-                print("Starting row must be 1 or greater. Please try again.")
-                start_row = None
-        except ValueError:
-            print("Invalid input. Please enter a numeric value for the starting row.")
-
-    while True:
-        try:
-            end_row = int(input("Enter the ending row (1-based index): ").strip())
-            if end_row < start_row:
-                print("Ending row must be greater than or equal to the starting row. Please try again.")
-            else:
-                break
-        except ValueError:
-            print("Invalid input. Please enter a numeric value for the ending row.")
-
-    columns_input = input(
-        "Enter column names to scan, separated by commas (default: D,E,F,G,H,I,J): "
-    ).strip()
-    columns_to_scan = (
-        [col.strip() for col in columns_input.split(",")]
-        if columns_input
-        else ["D", "E", "F", "G", "H", "I", "J"]
-    )
-
-    print(f"Columns to scan: {columns_to_scan}")
-    process_spreadsheet(start_row, end_row, columns_to_scan)
+    try:
+        df.to_excel(OUTPUT_FILE, index=False)
+        print(f"Results saved to {OUTPUT_FILE}")
+    except Exception as e:
+        print(f"Failed to save output file: {e}")
 
 if __name__ == "__main__":
     main()
