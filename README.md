@@ -1,4 +1,4 @@
-# Sketch Engine API Query Script
+# Corpus Querier
 
 This Python script queries the Sketch Engine API to retrieve total hit counts for CQL (Corpus Query Language) queries stored in an Excel spreadsheet. The results replace the original queries in the spreadsheet with their corresponding frequency counts and save the output as a new Excel file.
 
