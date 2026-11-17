@@ -9,6 +9,8 @@ The application works with existing CQL spreadsheets or generates queries automa
 Download the appropriate file from the [latest GitHub release](https://github.com/pedja-kovacevic/Corpus-Querier-CLARIN/releases/latest):
 
 - **Windows:** `Corpus-Querier-Setup.exe`
+- **macOS Apple Silicon:** `Corpus-Querier-macOS-arm64.dmg`
+- **macOS Intel:** `Corpus-Querier-macOS-x86_64.dmg`
 - **Ubuntu, Debian or Linux Mint:** `corpus-querier_2.0.0_amd64.deb`
 - **Other x86-64 Linux distributions:** `Corpus-Querier-x86_64.AppImage`
 
@@ -44,6 +46,10 @@ chmod +x Corpus-Querier-x86_64.AppImage
 ```
 
 Some Linux distributions require the FUSE 2 compatibility package to run AppImages.
+
+### macOS
+
+Download the DMG for your Mac, open it, then drag **Corpus Querier** to **Applications**. The app is not code-signed or notarized. On first launch, macOS may block it; control-click the app, choose **Open**, and confirm the prompt.
 
 ## What is new in version 2.0
 
@@ -176,7 +182,7 @@ python Corpus-Querier.py
 
 ## Building installers
 
-GitHub Actions builds the Windows installer, Linux AppImage and Debian package automatically when a version tag is pushed.
+GitHub Actions builds the Windows installer, macOS DMGs for Apple Silicon and Intel, Linux AppImage and Debian package automatically when a version tag is pushed.
 
 For a local Windows build, install Python 3 and [Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
 
@@ -185,6 +191,16 @@ powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
 ```
 
 The installer is written to `installer-output\Corpus-Querier-Setup.exe`.
+
+On macOS, install Python 3 and run:
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 -m PyInstaller --noconfirm --clean CorpusQuerier.spec
+bash macos/build_macos_package.sh "$(uname -m)"
+```
+
+The DMG is written to `macos-output/`.
 
 ## License
 
