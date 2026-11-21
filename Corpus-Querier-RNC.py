@@ -27,8 +27,8 @@ from rnc_provider import (
 )
 
 
-APP_NAME = "Corpus Querier RNC"
-APP_VERSION = "0.2.0"
+APP_NAME = "Corpus Querier — Russian National Corpus"
+APP_VERSION = "3.0.0-rc1"
 BASE_URL = CONCORDANCE_URL
 COMMON_CORPORA = [
     "MAIN", "PAPER", "REGIONAL", "SCHOOL", "DIALECT", "POETIC",
@@ -239,7 +239,9 @@ class QueryWorker(threading.Thread):
     def load_job(self) -> tuple[pd.DataFrame, list[tuple[int, int, str]]]:
         cfg = self.config
         if cfg.mode == "existing":
-            dataframe = pd.read_excel(cfg.input_file, header=None)
+            # Query columns begin as text but later receive integer counts and
+            # error markers. Explicit object dtype keeps this valid on pandas 3.
+            dataframe = pd.read_excel(cfg.input_file, header=None).astype(object)
             end_row = min(cfg.end_row or len(dataframe), len(dataframe))
             if cfg.start_row > len(dataframe):
                 raise ValueError("The starting row is outside the spreadsheet.")
@@ -271,7 +273,7 @@ class QueryWorker(threading.Thread):
         if not cfg.templates:
             raise ValueError("Enter at least one query template.")
 
-        dataframe = pd.DataFrame([["INPUT", *cfg.templates]])
+        dataframe = pd.DataFrame([["INPUT", *cfg.templates]], dtype=object)
         tasks = []
         for word in words:
             row = len(dataframe)
