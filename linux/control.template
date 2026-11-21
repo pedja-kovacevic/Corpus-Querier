@@ -5,7 +5,7 @@ Priority: optional
 Architecture: amd64
 Maintainer: Predrag Kovačević
 Depends: libc6 (>= 2.35), libx11-6, libxext6, libxrender1, libxft2, libfontconfig1, libfreetype6, libxcb1, zlib1g
-Description: Desktop CQL research tool for CLARIN.SI
- Corpus Querier calculates total CQL frequencies, extracts matched word forms
- and reports form frequencies. It processes existing CQL spreadsheets or
- generates queries from words and reusable WORD or LEMMA templates.
+Description: Desktop corpus research tool for CLARIN.SI and the RNC
+ Corpus Querier runs CLARIN.SI CQL and Russian National Corpus lexical-
+ grammatical searches. It supports batch spreadsheets, reusable templates,
+ exact totals, form results and provider-specific research metadata.

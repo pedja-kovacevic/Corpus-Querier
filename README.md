@@ -1,211 +1,153 @@
-# Corpus Querier 2.0
+# Corpus Querier 3.0 — Release Candidate 1
 
-Corpus Querier is a desktop application for running **CQL (Corpus Query Language)** queries against corpora hosted by [CLARIN.SI](https://www.clarin.si/). It can calculate total query frequencies, extract the word forms returned by a query, and report the frequency of every extracted form.
+Corpus Querier is a cross-platform desktop application for reproducible batch
+corpus research. Version 3 adds the official Russian National Corpus public API
+while preserving the complete CLARIN.SI workflow from version 2.
 
-The application works with existing CQL spreadsheets or generates queries automatically from words and reusable `{WORD}` and `{LEMMA}` templates.
+The opening screen asks the user to choose a provider:
 
-## Download and install
+- **CLARIN.SI** — Sketch Engine/Bonito CQL searches;
+- **Russian National Corpus** — native RNC lexical–grammatical searches.
 
-Download the appropriate file from the [latest GitHub release](https://github.com/pedja-kovacevic/Corpus-Querier-CLARIN/releases/latest):
+This is a release candidate intended for testing. Version 2.0 remains the
+current stable release until the acceptance tests below pass.
 
-- **Windows:** `Corpus-Querier-Setup.exe`
-- **macOS Apple Silicon:** `Corpus-Querier-macOS-arm64.dmg`
-- **macOS Intel:** `Corpus-Querier-macOS-x86_64.dmg`
-- **Ubuntu, Debian or Linux Mint:** `corpus-querier_2.0.0_amd64.deb`
-- **Other x86-64 Linux distributions:** `Corpus-Querier-x86_64.AppImage`
+## What version 3 contains
 
-Python, PowerShell, VS Code and manual dependency installation are not required when using these packages.
+### Shared capabilities
 
-### Windows
+- existing-query Excel spreadsheets;
+- automatic query generation from typed items or an Excel column;
+- reusable `{LEMMA}` and `{WORD}` templates;
+- at least two complete attempts for every query;
+- configurable request delay and timeout;
+- progress, elapsed time and ETA;
+- periodic saving and **Stop & save**;
+- capitalization grouping and minimum-frequency thresholds where forms are
+  available;
+- Windows, Linux and macOS packaging.
 
-Run `Corpus-Querier-Setup.exe` and follow the installation wizard. The installer:
+### CLARIN.SI provider
 
-- installs the application for the current user;
-- creates a Start Menu shortcut;
-- optionally creates a Desktop shortcut;
-- adds Corpus Querier to Windows **Installed apps**;
-- includes Python and all runtime dependencies.
-
-Windows SmartScreen may display a warning because the installer is not commercially code-signed.
-
-### Ubuntu, Debian and Linux Mint
-
-Open the `.deb` file with the system Software Installer, or run:
-
-```bash
-sudo apt install ./corpus-querier_2.0.0_amd64.deb
-```
-
-### AppImage
-
-The AppImage is portable and does not install anything:
-
-```bash
-chmod +x Corpus-Querier-x86_64.AppImage
-./Corpus-Querier-x86_64.AppImage
-```
-
-Some Linux distributions require the FUSE 2 compatibility package to run AppImages.
-
-### macOS
-
-Download the DMG for your Mac, open it, then drag **Corpus Querier** to **Applications**. The app is not code-signed or notarized. On first launch, macOS may block it; control-click the app, choose **Open**, and confirm the prompt.
-
-## What is new in version 2.0
-
-- Four selectable output modes: total frequencies, forms, forms with frequencies, or totals together with forms and frequencies.
-- Automatic extraction of surface forms returned by CQL queries.
-- Configurable minimum-attestation threshold.
-- Optional capitalization-sensitive or capitalization-insensitive grouping.
-- Structured Excel output for form-based research.
-- A reproducible `Run Information` sheet recording corpus and query settings.
-- Full backward compatibility with the original frequency-count workflow.
-- Every configured query attempt is always executed; the default is two attempts.
-
-## Input modes
-
-### Existing CQL spreadsheet
-
-Choose **Existing CQL spreadsheet** when the workbook already contains complete CQL expressions. Select the CQL columns and row range in the interface.
+- any available CLARIN.SI corpus name;
+- standard CQL input;
+- exact total query frequency;
+- exact form lists and form frequencies returned by the Bonito frequency
+  endpoint;
+- four output modes inherited from Corpus Querier 2.0;
+- backward-compatible total-frequency spreadsheets.
 
 Example:
 
 ```cql
+[lemma="čitati"]
 [lemma="čitati" & tag="Vmr3s"]
 ```
 
-### Generate CQLs
+### Russian National Corpus provider
 
-Choose **Generate CQLs** to create queries from words or lemmas. Input items can be loaded from an Excel column or pasted directly into the application.
+- masked personal API-token input and connection testing;
+- native lemma, surface-form, regular-expression and grammatical searches;
+- Base64 encoding of RNC regex fields;
+- Boolean grammatical formulas and word-distance ranges;
+- creation date, author, author sex, category, sphere, topic, text type, genre
+  and advanced metadata filters;
+- exact total occurrence counts from `queryStats.wordUsageCount`;
+- sampled forms and concordance contexts in separate long-format worksheets.
 
-Example input items:
+Example:
 
 ```text
-čitati, učiti, putovati
+[lemma="море"]
+[word="моря"]
+[lemma=".*ение"]
+[lemma="книга" & gramm="(S) & -(gen|gen2)"]
+[lemma="синий"] [lemma="мяч" & dist="1:3"]
 ```
 
-Example templates:
+RNC `tag`/`gramm` values must already be native RNC formulas. Corpus Querier
+does not silently translate another corpus's tagset.
 
-```cql
-[lemma="{LEMMA}"]
-[lemma="{LEMMA}" & tag="Vmr3s"]
-[word="{WORD}"]
-```
+## Exact results versus samples
 
-Every template is applied to every input item.
+The interface deliberately distinguishes result scope:
 
-## Output modes
+| Provider/result | Scope |
+|---|---|
+| CLARIN total frequency | Exact API total |
+| CLARIN form-frequency list | Complete frequency response |
+| RNC total frequency | Exact API total |
+| RNC forms and contexts | Returned concordance sample |
 
-### Total frequency
+An RNC concordance can contain hundreds of pages. The app never labels the
+forms seen on one returned page as an exhaustive form-frequency distribution.
 
-Returns only the total number of matches for each CQL. This mode preserves the original spreadsheet structure: every processed CQL cell is replaced by its highest valid hit count.
+## RNC token security
 
-| INPUT | `[lemma="{LEMMA}"]` | `[lemma="{LEMMA}" & tag="Vmr3s"]` |
-|---|---:|---:|
-| čitati | 125000 | 42000 |
-| putovati | 38000 | 11500 |
+The token is held in memory only. It is not written to source code, settings or
+Excel output. Never commit a personal token to GitHub. Revoke any token that has
+been posted or shared publicly.
 
-No additional worksheets are created in this mode.
-
-### Forms only
-
-Extracts distinct surface forms but does not include their token frequencies in the `Forms` sheet.
-
-### Forms with frequencies
-
-Extracts every qualifying form and places its frequency in a separate numeric Excel cell.
-
-| QUERY ID | INPUT | FORM | FREQUENCY | RANK |
-|---|---|---|---:|---:|
-| Q000001 | čitati | čita | 42000 | 1 |
-| Q000001 | čitati | Čita | 850 | 2 |
-
-### Total + forms with frequencies
-
-Provides the complete result: the overall number of CQL matches, each qualifying surface form, its individual frequency, its rank and its percentage of the total.
-
-## Structured workbooks
-
-Every forms-based mode creates three worksheets:
-
-1. **Queries** — one row per executed query, including the input, template, generated CQL, status, attempts and duration. The combined mode also includes total hits.
-2. **Forms** — one row per extracted form, with separate cells for every value.
-3. **Run Information** — corpus, output mode, capitalization setting, threshold, attempts, delay, timeout and timestamps.
-
-The worksheets have frozen headers, filters and adjusted column widths.
-
-## Capitalization
-
-When **Capitalization matters** is enabled, forms such as `čita`, `Čita` and `ČITA` remain separate.
-
-When it is disabled, capitalization variants are combined into one form and their frequencies are added before the minimum-attestation threshold is applied.
-
-## Minimum attestations
-
-The minimum-attestation setting determines how frequently a surface form must occur to appear in the output.
-
-- `1` includes every attested form.
-- `10` excludes forms occurring fewer than ten times.
-- Larger values can be used to reduce spelling variation and annotation noise.
-
-The total CQL frequency is not changed by this threshold.
-
-## Repeated queries
-
-Corpus Querier performs every configured attempt. With the default setting of two attempts, each CQL is queried twice even when the first attempt succeeds.
-
-- Total-frequency mode saves the highest valid total.
-- Forms-based modes retain the highest observed frequency for each form.
-- Failed attempts are ignored if another attempt succeeds.
-
-This behaviour is intentional because some corpora may return an incomplete result on an initial request.
-
-## Progress and saving
-
-The interface displays:
-
-- the current CQL and spreadsheet cell;
-- completed and failed queries;
-- elapsed time and estimated time remaining;
-- a progress bar and detailed live log.
-
-Results are saved periodically. **Stop & save** finishes the current request and preserves the results collected so far.
-
-## Running from source
+## Source installation
 
 Python 3.10 or newer is recommended.
 
 ```bash
-python -m pip install -r requirements.txt
-python Corpus-Querier.py
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python Corpus-Querier.py
 ```
 
-## Building installers
+On Windows, use `.venv\Scripts\python.exe` instead of `.venv/bin/python`.
 
-GitHub Actions builds the Windows installer, macOS DMGs for Apple Silicon and Intel, Linux AppImage and Debian package automatically when a version tag is pushed.
+## Release-candidate acceptance tests
 
-For a local Windows build, install Python 3 and [Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
+Publication as 3.0 requires all of the following:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
-```
+1. **Automated tests**
+   - translator and response-parser tests pass;
+   - CLARIN v2 regression tests pass;
+   - spreadsheet cells accept totals and error markers;
+   - all three packaging workflows complete.
+2. **CLARIN smoke test**
+   - one existing-query workbook;
+   - one generated-template run;
+   - total-frequency mode;
+   - total plus forms/frequencies mode;
+   - capitalization grouping and a threshold greater than one;
+   - two visibly completed attempts.
+3. **RNC smoke test**
+   - token validation;
+   - one literal lemma query;
+   - one regex query;
+   - one grammatical query;
+   - one metadata/date-filtered query;
+   - exact-total mode and exact-total-plus-sampled-forms mode;
+   - two visibly completed attempts.
+4. **Spreadsheet verification**
+   - correct totals and query labels;
+   - separate numeric cells for form frequencies;
+   - RNC sample scope clearly recorded;
+   - workbook opens without a repair warning;
+   - stop-and-save preserves completed work.
+5. **Installer verification**
+   - Windows installer launches without Python installed;
+   - Debian package or AppImage launches on Linux;
+   - both macOS DMGs launch on their respective architectures, subject to the
+     expected unsigned-app warning;
+   - provider selection and one short query work in every tested package.
 
-The installer is written to `installer-output\Corpus-Querier-Setup.exe`.
+The same linguistic counts do not need to be repeated on every platform. One
+full functional test per provider plus launch tests for the remaining packages
+is sufficient once the shared source build has passed automated tests.
 
-On macOS, install Python 3 and run:
+## Building packages
 
-```bash
-python3 -m pip install -r requirements.txt
-python3 -m PyInstaller --noconfirm --clean CorpusQuerier.spec
-bash macos/build_macos_package.sh "$(uname -m)"
-```
+The GitHub Actions workflows can be run manually against the development branch.
+They upload installable artifacts without publishing a release. Final packages
+are attached to a release only when the approved `v3.0.0` tag is pushed.
 
-The DMG is written to `macos-output/`.
+## License and acknowledgment
 
-## License
-
-Corpus Querier is released under the [MIT License](LICENSE).
-
-## Acknowledgments
-
-Corpus Querier uses the corpus-querying infrastructure provided by [CLARIN.SI](https://www.clarin.si/).
+Corpus Querier is released under the MIT License. CLARIN.SI and the Russian
+National Corpus provide the corpus-querying infrastructure used by the app.
