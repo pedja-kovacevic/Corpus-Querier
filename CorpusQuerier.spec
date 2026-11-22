@@ -1,10 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 import sys
+from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 hiddenimports = collect_submodules("customtkinter")
 datas = collect_data_files("customtkinter")
+datas += [("assets/corpus-querier.png", "assets")]
+
+icon_file = str(
+    Path("assets")
+    / ("corpus-querier.ico" if sys.platform == "win32" else "corpus-querier.png")
+)
 
 a = Analysis(
     ["Corpus-Querier.py"],
@@ -38,6 +45,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=icon_file,
 )
 
 if sys.platform == "darwin":
@@ -45,4 +53,11 @@ if sys.platform == "darwin":
         exe,
         name="Corpus Querier.app",
         bundle_identifier="si.clarin.corpusquerier",
+        icon="assets/corpus-querier.png",
+        info_plist={
+            "CFBundleDisplayName": "Corpus Querier",
+            "CFBundleShortVersionString": "3.0.0",
+            "CFBundleVersion": "3.0.0",
+            "NSHighResolutionCapable": True,
+        },
     )

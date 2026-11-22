@@ -14,6 +14,7 @@ import customtkinter as ctk
 import pandas as pd
 import requests
 
+from app_identity import APP_VERSION, apply_window_icon, load_brand_image
 from rnc_cql_translator import TranslationError, translate_cql
 from rnc_provider import (
     AUTH_CHECK_URL,
@@ -28,7 +29,6 @@ from rnc_provider import (
 
 
 APP_NAME = "Corpus Querier — Russian National Corpus"
-APP_VERSION = "3.0.0-rc1"
 BASE_URL = CONCORDANCE_URL
 COMMON_CORPORA = [
     "MAIN", "PAPER", "REGIONAL", "SCHOOL", "DIALECT", "POETIC",
@@ -408,6 +408,7 @@ class QueryWorker(threading.Thread):
 class CorpusQuerierRNCApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+        apply_window_icon(self)
         self.title(f"{APP_NAME} {APP_VERSION}")
         self.geometry("1280x980")
         self.minsize(1120, 820)
@@ -426,8 +427,12 @@ class CorpusQuerierRNCApp(ctk.CTk):
         side = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color=("#E8EEF5", "#111827"))
         side.grid(row=0, column=0, sticky="nsew")
         side.grid_propagate(False)
+        self.sidebar_brand_image = load_brand_image((64, 64))
+        ctk.CTkLabel(side, text="", image=self.sidebar_brand_image).pack(
+            anchor="w", padx=28, pady=(24, 0)
+        )
         ctk.CTkLabel(side, text="CORPUS\nQUERIER", font=ctk.CTkFont(size=26, weight="bold"),
-                     justify="left").pack(anchor="w", padx=28, pady=(30, 4))
+                     justify="left").pack(anchor="w", padx=28, pady=(8, 4))
         ctk.CTkLabel(side, text="Russian National Corpus", text_color=("#526070", "#94A3B8"),
                      font=ctk.CTkFont(size=13)).pack(anchor="w", padx=28, pady=(0, 30))
         self.status_pill = ctk.CTkLabel(side, text="●  READY", fg_color=("#D9F7E8", "#123D2B"),

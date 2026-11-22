@@ -1,14 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#2563eb"/>
-      <stop offset="1" stop-color="#0f172a"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="108" fill="url(#background)"/>
-  <path d="M151 151h210v52H203v106c0 40 22 61 64 61 35 0 61-13 78-39l40 32c-27 42-67 63-121 63-75 0-113-39-113-116z" fill="#fff"/>
-  <circle cx="335" cy="276" r="58" fill="none" stroke="#60a5fa" stroke-width="24"/>
-  <path d="m376 317 62 62" stroke="#60a5fa" stroke-width="28" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Corpus Querier data bird</title>
+  <desc id="desc">A stylized bird pecking a highlighted point on a corpus data surface.</desc>
+
+  <!-- One corpus surface: a compact field of queryable data points. -->
+  <ellipse cx="256" cy="388" rx="192" ry="70" fill="#0B2F55"/>
+  <circle cx="132" cy="388" r="20" fill="#16B8B5"/>
+  <circle cx="194" cy="388" r="20" fill="#16B8B5"/>
+  <circle cx="256" cy="388" r="20" fill="#16B8B5"/>
+  <circle cx="318" cy="388" r="23" fill="#F5A000"/>
+  <circle cx="380" cy="388" r="20" fill="#16B8B5"/>
+
+  <!-- Two bold tail feathers behind one compact bird silhouette. -->
+  <path d="M146 151C98 130 64 94 55 51c48 7 91 32 120 72z" fill="#0B2F55"/>
+  <path d="M139 178c-51 2-92-16-119-53 43-18 92-13 139 14z" fill="#0B2F55"/>
+
+  <!-- Body, head and one minimal wing. -->
+  <ellipse cx="226" cy="220" rx="133" ry="112" fill="#0B2F55"/>
+  <circle cx="324" cy="246" r="78" fill="#0B2F55"/>
+  <path d="M132 191c36-25 91-25 133 1-9 53-48 88-98 87-27-21-41-51-35-88z" fill="#FFF4DC"/>
+
+  <!-- The amber beak touches the selected data point. -->
+  <path d="M301 288h48l-31 100z" fill="#F5A000"/>
+  <circle cx="340" cy="235" r="9" fill="#FFF4DC"/>
 </svg>
 

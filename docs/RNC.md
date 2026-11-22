@@ -1,4 +1,4 @@
-# Corpus Querier RNC 0.2
+# Russian National Corpus provider — Corpus Querier 3.0
 
 Corpus Querier RNC is an experimental desktop client for the official Russian
 National Corpus API. It converts compact, CQL-like templates into native RNC

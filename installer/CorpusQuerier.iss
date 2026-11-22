@@ -1,5 +1,5 @@
 #define MyAppName "Corpus Querier"
-#define MyAppVersion "3.0.0-rc1"
+#define MyAppVersion "3.0.0"
 #define MyAppPublisher "Predrag Kovačević"
 #define MyAppExeName "Corpus Querier.exe"
 
@@ -24,6 +24,8 @@ UninstallDisplayName={#MyAppName}
 SetupLogging=yes
 CloseApplications=yes
 RestartApplications=no
+SetupIconFile=..\assets\corpus-querier.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

@@ -14,9 +14,9 @@ import customtkinter as ctk
 import pandas as pd
 import requests
 
+from app_identity import APP_VERSION, apply_window_icon, load_brand_image
 
 APP_NAME = "Corpus Querier — CLARIN.SI"
-APP_VERSION = "3.0.0-rc1"
 VIEW_URL = "https://www.clarin.si/ske/bonito/run.cgi/view"
 FREQS_URL = "https://www.clarin.si/ske/bonito/run.cgi/freqs"
 DEFAULT_MIN_FORM_FREQUENCY = 1
@@ -538,6 +538,7 @@ class QueryWorker(threading.Thread):
 class CorpusQuerierApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+        apply_window_icon(self)
         self.title(f"{APP_NAME} {APP_VERSION} · CLARIN.SI")
         self.geometry("1220x820")
         self.minsize(1060, 720)
@@ -560,9 +561,13 @@ class CorpusQuerierApp(ctk.CTk):
         side = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color=("#E8EEF5", "#111827"))
         side.grid(row=0, column=0, sticky="nsew")
         side.grid_propagate(False)
+        self.sidebar_brand_image = load_brand_image((64, 64))
+        ctk.CTkLabel(side, text="", image=self.sidebar_brand_image).pack(
+            anchor="w", padx=28, pady=(24, 0)
+        )
         ctk.CTkLabel(side, text="CORPUS\nQUERIER", font=ctk.CTkFont(size=26, weight="bold"),
-                     justify="left").pack(anchor="w", padx=28, pady=(30, 4))
-        ctk.CTkLabel(side, text="CLARIN.SI corpus research · v2.0", text_color=("#526070", "#94A3B8"),
+                     justify="left").pack(anchor="w", padx=28, pady=(8, 4))
+        ctk.CTkLabel(side, text=f"CLARIN.SI corpus research · v{APP_VERSION}", text_color=("#526070", "#94A3B8"),
                      font=ctk.CTkFont(size=13)).pack(anchor="w", padx=28, pady=(0, 30))
         self.status_pill = ctk.CTkLabel(side, text="●  READY", fg_color=("#D9F7E8", "#123D2B"),
                                         text_color=("#087443", "#6EE7B7"), corner_radius=12, height=34)

@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import customtkinter as ctk
 
+from app_identity import APP_VERSION, apply_window_icon, load_brand_image
 from corpus_querier_clarin import CorpusQuerierApp
 from corpus_querier_rnc import CorpusQuerierRNCApp
-
-
-APP_VERSION = "3.0.0-rc1"
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -17,27 +15,33 @@ ctk.set_default_color_theme("blue")
 class ProviderChooser(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
+        apply_window_icon(self)
         self.provider: str | None = None
         self.title(f"Corpus Querier {APP_VERSION}")
         self.geometry("820x570")
         self.minsize(760, 520)
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)
+
+        self.brand_image = load_brand_image((88, 88))
+        ctk.CTkLabel(self, text="", image=self.brand_image).grid(
+            row=0, column=0, pady=(24, 0)
+        )
 
         ctk.CTkLabel(
             self,
             text="CORPUS QUERIER",
             font=ctk.CTkFont(size=31, weight="bold"),
-        ).grid(row=0, column=0, pady=(38, 4))
+        ).grid(row=1, column=0, pady=(4, 4))
         ctk.CTkLabel(
             self,
             text=f"Version {APP_VERSION} · Choose a corpus provider",
             text_color=("#526070", "#94A3B8"),
             font=ctk.CTkFont(size=14),
-        ).grid(row=1, column=0, pady=(0, 24))
+        ).grid(row=2, column=0, pady=(0, 20))
 
         cards = ctk.CTkFrame(self, fg_color="transparent")
-        cards.grid(row=2, column=0, sticky="nsew", padx=34, pady=(0, 18))
+        cards.grid(row=3, column=0, sticky="nsew", padx=34, pady=(0, 18))
         cards.grid_columnconfigure((0, 1), weight=1, uniform="provider")
         cards.grid_rowconfigure(0, weight=1)
 
@@ -77,7 +81,7 @@ class ProviderChooser(ctk.CTk):
             wraplength=730,
             justify="center",
             text_color=("#526070", "#94A3B8"),
-        ).grid(row=3, column=0, padx=30, pady=(0, 24))
+        ).grid(row=4, column=0, padx=30, pady=(0, 24))
 
     def _provider_card(
         self,

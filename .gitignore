@@ -1,9 +1,11 @@
 __pycache__/
+.venv/
 *.py[cod]
 build/
 dist/
 installer-output/
 linux-output/
+macos-output/
 build-linux/
 appimagetool-*.AppImage
 *.spec.bak

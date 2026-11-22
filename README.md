@@ -1,4 +1,4 @@
-# Corpus Querier 3.0 — Release Candidate 1
+# Corpus Querier 3.0
 
 Corpus Querier is a cross-platform desktop application for reproducible batch
 corpus research. Version 3 adds the official Russian National Corpus public API
@@ -9,8 +9,21 @@ The opening screen asks the user to choose a provider:
 - **CLARIN.SI** — Sketch Engine/Bonito CQL searches;
 - **Russian National Corpus** — native RNC lexical–grammatical searches.
 
-This is a release candidate intended for testing. Version 2.0 remains the
-current stable release until the acceptance tests below pass.
+## Download and install
+
+Open the [latest GitHub release](https://github.com/pedja-kovacevic/Corpus-Querier-CLARIN/releases/latest)
+and download the package for your system:
+
+| Platform | Download |
+|---|---|
+| Windows | `Corpus-Querier-Setup.exe` |
+| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.0.0_amd64.deb` |
+| Linux portable | `Corpus-Querier-x86_64.AppImage` |
+| macOS Apple Silicon | `Corpus-Querier-macOS-arm64.dmg` |
+| macOS Intel | `Corpus-Querier-macOS-x86_64.dmg` |
+
+The installers contain the application and its Python dependencies. End users
+do not need Python, PowerShell, Visual Studio Code or a terminal.
 
 ## What version 3 contains
 
@@ -26,6 +39,9 @@ current stable release until the acceptance tests below pass.
 - capitalization grouping and minimum-frequency thresholds where forms are
   available;
 - Windows, Linux and macOS packaging.
+
+Version 3 also introduces a shared visual identity on every platform: a
+stylized data bird pecking a highlighted point from a corpus surface.
 
 ### CLARIN.SI provider
 
@@ -100,9 +116,9 @@ python -m venv .venv
 
 On Windows, use `.venv\Scripts\python.exe` instead of `.venv/bin/python`.
 
-## Release-candidate acceptance tests
+## Release validation
 
-Publication as 3.0 requires all of the following:
+The release is checked with the following automated and manual tests:
 
 1. **Automated tests**
    - translator and response-parser tests pass;
@@ -143,9 +159,10 @@ is sufficient once the shared source build has passed automated tests.
 
 ## Building packages
 
-The GitHub Actions workflows can be run manually against the development branch.
-They upload installable artifacts without publishing a release. Final packages
-are attached to a release only when the approved `v3.0.0` tag is pushed.
+The GitHub Actions workflows can be run manually against a development branch.
+They upload installable artifacts without publishing a release. Versioned
+packages are attached automatically when a release tag such as `v3.0.0` is
+pushed.
 
 ## License and acknowledgment
 
