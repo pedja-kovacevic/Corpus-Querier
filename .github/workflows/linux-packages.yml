@@ -42,8 +42,12 @@ jobs:
           chmod +x appimagetool-x86_64.AppImage
       - name: Build AppImage and Debian package
         run: |
-          VERSION="${{ inputs.version }}"
-          if [ -z "$VERSION" ]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            if [ -z "$VERSION" ]; then VERSION="3.0.0-rc1"; fi
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           bash linux/build_linux_packages.sh "$VERSION"
       - name: Upload Linux package artifacts
         uses: actions/upload-artifact@v7
