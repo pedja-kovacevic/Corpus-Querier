@@ -1,0 +1,45 @@
+name: Publish versioned release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version without the v prefix
+        required: true
+        default: 3.0.0
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/publish-release.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  tag-release:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Create and push version tag
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          VERSION="$REQUESTED_VERSION"
+          if [ -z "$VERSION" ]; then VERSION="3.0.0"; fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid semantic version: $VERSION" >&2
+            exit 1
+          fi
+          TAG="v$VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists; nothing to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$GITHUB_SHA" -m "Corpus Querier $VERSION"
+          git push origin "$TAG"
