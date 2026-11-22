@@ -2,6 +2,11 @@ name: Build Linux packages
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Package version
+        required: true
+        default: 3.0.0-rc1
   push:
     tags:
       - "v*"
@@ -36,7 +41,10 @@ jobs:
             https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
       - name: Build AppImage and Debian package
-        run: bash linux/build_linux_packages.sh "${GITHUB_REF_NAME#v}"
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          bash linux/build_linux_packages.sh "$VERSION"
       - name: Upload Linux package artifacts
         uses: actions/upload-artifact@v7
         with:
