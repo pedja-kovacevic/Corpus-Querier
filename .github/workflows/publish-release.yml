@@ -26,6 +26,7 @@ jobs:
           fetch-depth: 0
       - name: Create and push version tag
         env:
+          GH_TOKEN: ${{ github.token }}
           REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           VERSION="$REQUESTED_VERSION"
@@ -36,10 +37,16 @@ jobs:
           fi
           TAG="v$VERSION"
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "$TAG already exists; nothing to publish."
-            exit 0
+            echo "$TAG already exists; using the existing release tag."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" "$GITHUB_SHA" -m "Corpus Querier $VERSION"
+            git push origin "$TAG"
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" "$GITHUB_SHA" -m "Corpus Querier $VERSION"
-          git push origin "$TAG"
+
+          # Tags pushed with GITHUB_TOKEN do not recursively start other
+          # workflows, so dispatch each platform build explicitly at the tag.
+          gh workflow run windows-installer.yml --ref "$TAG"
+          gh workflow run linux-packages.yml --ref "$TAG" -f version="$VERSION"
+          gh workflow run macos-packages.yml --ref "$TAG"
