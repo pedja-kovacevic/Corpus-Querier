@@ -11,7 +11,7 @@ from PIL import Image
 
 
 APP_NAME = "Corpus Querier"
-APP_VERSION = "3.0.1"
+APP_VERSION = "3.0.2"
 
 
 def resource_path(relative_path: str) -> Path:

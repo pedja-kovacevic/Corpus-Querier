@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-3.0.1}"
+VERSION="${1:-3.0.2}"
 if [[ ! "$VERSION" =~ ^[0-9]+([.][0-9]+)*([+-][A-Za-z0-9.]+)?$ ]]; then
-  VERSION="3.0.1"
+  VERSION="3.0.2"
 fi
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,7 +25,8 @@ mkdir -p "$OUTPUT_DIR"
 mkdir -p \
   "$APPDIR/usr/bin" \
   "$APPDIR/usr/share/applications" \
-  "$APPDIR/usr/share/icons/hicolor/scalable/apps"
+  "$APPDIR/usr/share/icons/hicolor/scalable/apps" \
+  "$APPDIR/usr/share/pixmaps"
 install -m 755 "$APP_BINARY" "$APPDIR/usr/bin/corpus-querier"
 install -m 755 "$PROJECT_ROOT/linux/AppRun" "$APPDIR/AppRun"
 install -m 644 "$PROJECT_ROOT/linux/corpus-querier.desktop" \
@@ -33,10 +34,12 @@ install -m 644 "$PROJECT_ROOT/linux/corpus-querier.desktop" \
 install -m 644 "$PROJECT_ROOT/linux/corpus-querier.desktop" \
   "$APPDIR/usr/share/applications/corpus-querier.desktop"
 install -m 644 "$PROJECT_ROOT/assets/corpus-querier.svg" \
-  "$APPDIR/corpus-querier.svg"
-ln -s corpus-querier.svg "$APPDIR/.DirIcon"
+  "$APPDIR/corpus-querier-data-bird.svg"
+ln -s corpus-querier-data-bird.svg "$APPDIR/.DirIcon"
 install -m 644 "$PROJECT_ROOT/assets/corpus-querier.svg" \
-  "$APPDIR/usr/share/icons/hicolor/scalable/apps/corpus-querier.svg"
+  "$APPDIR/usr/share/icons/hicolor/scalable/apps/corpus-querier-data-bird.svg"
+install -m 644 "$PROJECT_ROOT/assets/corpus-querier.png" \
+  "$APPDIR/usr/share/pixmaps/corpus-querier-data-bird.png"
 
 ARCH=x86_64 VERSION="$VERSION" \
   "$PROJECT_ROOT/appimagetool-x86_64.AppImage" --appimage-extract-and-run \
@@ -49,12 +52,15 @@ mkdir -p \
   "$DEB_ROOT/usr/bin" \
   "$DEB_ROOT/usr/share/applications" \
   "$DEB_ROOT/usr/share/icons/hicolor/scalable/apps" \
+  "$DEB_ROOT/usr/share/pixmaps" \
   "$DEB_ROOT/usr/share/doc/corpus-querier"
 install -m 755 "$APP_BINARY" "$DEB_ROOT/usr/bin/corpus-querier"
 install -m 644 "$PROJECT_ROOT/linux/corpus-querier.desktop" \
   "$DEB_ROOT/usr/share/applications/corpus-querier.desktop"
 install -m 644 "$PROJECT_ROOT/assets/corpus-querier.svg" \
-  "$DEB_ROOT/usr/share/icons/hicolor/scalable/apps/corpus-querier.svg"
+  "$DEB_ROOT/usr/share/icons/hicolor/scalable/apps/corpus-querier-data-bird.svg"
+install -m 644 "$PROJECT_ROOT/assets/corpus-querier.png" \
+  "$DEB_ROOT/usr/share/pixmaps/corpus-querier-data-bird.png"
 install -m 644 "$PROJECT_ROOT/LICENSE" \
   "$DEB_ROOT/usr/share/doc/corpus-querier/copyright"
 install -m 755 "$PROJECT_ROOT/linux/postinst" "$DEB_ROOT/DEBIAN/postinst"
