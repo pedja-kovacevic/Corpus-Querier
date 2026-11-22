@@ -7,6 +7,7 @@ import customtkinter as ctk
 from app_identity import APP_VERSION, apply_window_icon, load_brand_image
 from corpus_querier_clarin import CorpusQuerierApp
 from corpus_querier_rnc import CorpusQuerierRNCApp
+from corpus_querier_sketchengine import CorpusQuerierSketchEngineApp
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -18,8 +19,8 @@ class ProviderChooser(ctk.CTk):
         apply_window_icon(self)
         self.provider: str | None = None
         self.title(f"Corpus Querier {APP_VERSION}")
-        self.geometry("820x570")
-        self.minsize(760, 520)
+        self.geometry("1120x590")
+        self.minsize(1020, 540)
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(3, weight=1)
 
@@ -42,7 +43,7 @@ class ProviderChooser(ctk.CTk):
 
         cards = ctk.CTkFrame(self, fg_color="transparent")
         cards.grid(row=3, column=0, sticky="nsew", padx=34, pady=(0, 18))
-        cards.grid_columnconfigure((0, 1), weight=1, uniform="provider")
+        cards.grid_columnconfigure((0, 1, 2), weight=1, uniform="provider")
         cards.grid_rowconfigure(0, weight=1)
 
         self._provider_card(
@@ -61,6 +62,19 @@ class ProviderChooser(ctk.CTk):
         self._provider_card(
             cards,
             column=1,
+            title="Sketch Engine",
+            subtitle="Authenticated official API",
+            description=(
+                "Use a personal API key to query the British National Corpus "
+                "and other corpora available in your Sketch Engine account."
+            ),
+            details="CQL · BNC · authenticated API",
+            button_text="Open Sketch Engine",
+            provider="sketchengine",
+        )
+        self._provider_card(
+            cards,
+            column=2,
             title="Russian National Corpus",
             subtitle="Official RNC public API",
             description=(
@@ -78,7 +92,7 @@ class ProviderChooser(ctk.CTk):
                 "Provider-specific query syntax and result scope are kept explicit. "
                 "RNC sampled forms are never presented as exhaustive counts."
             ),
-            wraplength=730,
+            wraplength=980,
             justify="center",
             text_color=("#526070", "#94A3B8"),
         ).grid(row=4, column=0, padx=30, pady=(0, 24))
@@ -96,7 +110,7 @@ class ProviderChooser(ctk.CTk):
         provider: str,
     ) -> None:
         card = ctk.CTkFrame(parent, corner_radius=16)
-        card.grid(row=0, column=column, sticky="nsew", padx=(0, 8) if column == 0 else (8, 0))
+        card.grid(row=0, column=column, sticky="nsew", padx=8)
         card.grid_columnconfigure(0, weight=1)
         card.grid_rowconfigure(3, weight=1)
         ctk.CTkLabel(
@@ -131,6 +145,8 @@ def main() -> None:
     chooser.mainloop()
     if chooser.provider == "clarin":
         CorpusQuerierApp().mainloop()
+    elif chooser.provider == "sketchengine":
+        CorpusQuerierSketchEngineApp().mainloop()
     elif chooser.provider == "rnc":
         CorpusQuerierRNCApp().mainloop()
 

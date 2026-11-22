@@ -1,0 +1,46 @@
+name: Build Sketch Engine test package
+
+on:
+  push:
+    branches:
+      - sketch-engine-module
+
+permissions:
+  contents: read
+
+jobs:
+  linux-test-package:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out development branch
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libfuse2
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Run automated tests
+        run: python -m unittest -v
+      - name: Build standalone application
+        run: python -m PyInstaller --noconfirm --clean CorpusQuerier.spec
+      - name: Download AppImage packaging tool
+        run: |
+          curl --fail --location --output appimagetool-x86_64.AppImage \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+      - name: Build Linux test packages
+        run: bash linux/build_linux_packages.sh "3.0.2+sketchtest1"
+      - name: Upload test packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: Corpus-Querier-Sketch-Engine-Test
+          path: |
+            linux-output/Corpus-Querier-x86_64.AppImage
+            linux-output/corpus-querier_*_amd64.deb
+          if-no-files-found: error
