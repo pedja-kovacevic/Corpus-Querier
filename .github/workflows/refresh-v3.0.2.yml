@@ -1,0 +1,55 @@
+name: Refresh Corpus Querier 3.0.2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/refresh-v3.0.2.yml"
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out corrected release source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Move the 3.0.2 tag to the corrected source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag --force --annotate v3.0.2 "$GITHUB_SHA" --message "Corpus Querier 3.0.2"
+          git push --force origin refs/tags/v3.0.2
+
+      - name: Remove superseded installers and update release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for asset in \
+            Corpus-Querier-Setup.exe \
+            corpus-querier_3.0.2_amd64.deb \
+            Corpus-Querier-x86_64.AppImage \
+            Corpus-Querier-macOS-arm64.dmg \
+            Corpus-Querier-macOS-x86_64.dmg
+          do
+            gh release delete-asset v3.0.2 "$asset" --yes || true
+          done
+          gh release edit v3.0.2 \
+            --title "Corpus Querier 3.0.2" \
+            --notes-file RELEASE_NOTES_3.0.2.md
+
+      - name: Build corrected installers for every platform
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run windows-installer.yml --ref v3.0.2
+          gh workflow run linux-packages.yml --ref v3.0.2 --field version=3.0.2
+          gh workflow run macos-packages.yml --ref v3.0.2

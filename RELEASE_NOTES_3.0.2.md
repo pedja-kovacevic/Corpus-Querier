@@ -1,17 +1,22 @@
 # Corpus Querier 3.0.2
 
-This maintenance release forces Linux desktops to load the new Corpus Querier
-data-bird artwork instead of retaining an older cached icon.
+This maintenance release installs the approved Corpus Querier data-bird
+artwork consistently across Linux, Windows and macOS.
 
 ## Linux icon fix
 
+- Preserves the approved halfway-down pecking pose over one flat corpus surface.
 - Gives the data-bird artwork a new, unique Linux icon identifier:
   `corpus-querier-data-bird`.
-- Installs the scalable SVG in the standard hicolor icon theme.
-- Installs the PNG in `/usr/share/pixmaps` as a compatibility fallback.
+- Installs optimized PNG icons at every standard size from 16 to 512 pixels in
+  the hicolor icon theme.
+- Installs a PNG in `/usr/share/pixmaps` as a compatibility fallback.
 - Uses the same fresh identifier in the Debian launcher and AppImage.
 - Retains the Linux window-class association and automatic cache refresh from
   version 3.0.1.
+
+The Windows executable/installer and both macOS application packages use the
+same approved artwork.
 
 Application behavior is unchanged. CLARIN.SI and RNC queries still perform at
 least two complete attempts.
