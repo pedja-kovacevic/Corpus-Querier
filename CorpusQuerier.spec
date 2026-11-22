@@ -5,6 +5,10 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 hiddenimports = collect_submodules("customtkinter")
+# Pillow imports this helper dynamically when ImageTk initializes its Tcl
+# command. PyInstaller cannot discover that import statically, which caused
+# the Linux build to crash before the launcher window appeared.
+hiddenimports += ["PIL._tkinter_finder"]
 datas = collect_data_files("customtkinter")
 datas += [("assets/corpus-querier.png", "assets")]
 
@@ -56,8 +60,8 @@ if sys.platform == "darwin":
         icon="assets/corpus-querier.png",
         info_plist={
             "CFBundleDisplayName": "Corpus Querier",
-            "CFBundleShortVersionString": "3.0.0",
-            "CFBundleVersion": "3.0.0",
+            "CFBundleShortVersionString": "3.0.1",
+            "CFBundleVersion": "3.0.1",
             "NSHighResolutionCapable": True,
         },
     )

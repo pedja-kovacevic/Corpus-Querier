@@ -537,7 +537,7 @@ class QueryWorker(threading.Thread):
 
 class CorpusQuerierApp(ctk.CTk):
     def __init__(self):
-        super().__init__()
+        super().__init__(className="CorpusQuerier")
         apply_window_icon(self)
         self.title(f"{APP_NAME} {APP_VERSION} · CLARIN.SI")
         self.geometry("1220x820")

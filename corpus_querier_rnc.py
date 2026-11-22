@@ -407,7 +407,7 @@ class QueryWorker(threading.Thread):
 
 class CorpusQuerierRNCApp(ctk.CTk):
     def __init__(self):
-        super().__init__()
+        super().__init__(className="CorpusQuerier")
         apply_window_icon(self)
         self.title(f"{APP_NAME} {APP_VERSION}")
         self.geometry("1280x980")

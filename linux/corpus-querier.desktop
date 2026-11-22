@@ -9,3 +9,4 @@ Terminal=false
 Categories=Education;Science;DataVisualization;
 Keywords=corpus;linguistics;CQL;CLARIN;RNC;Russian;frequency;word forms;research;
 StartupNotify=true
+StartupWMClass=CorpusQuerier

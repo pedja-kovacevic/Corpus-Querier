@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-3.0.0}"
+VERSION="${1:-3.0.1}"
 if [[ ! "$VERSION" =~ ^[0-9]+([.][0-9]+)*([+-][A-Za-z0-9.]+)?$ ]]; then
-  VERSION="3.0.0"
+  VERSION="3.0.1"
 fi
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,6 +34,7 @@ install -m 644 "$PROJECT_ROOT/linux/corpus-querier.desktop" \
   "$APPDIR/usr/share/applications/corpus-querier.desktop"
 install -m 644 "$PROJECT_ROOT/assets/corpus-querier.svg" \
   "$APPDIR/corpus-querier.svg"
+ln -s corpus-querier.svg "$APPDIR/.DirIcon"
 install -m 644 "$PROJECT_ROOT/assets/corpus-querier.svg" \
   "$APPDIR/usr/share/icons/hicolor/scalable/apps/corpus-querier.svg"
 
@@ -56,6 +57,8 @@ install -m 644 "$PROJECT_ROOT/assets/corpus-querier.svg" \
   "$DEB_ROOT/usr/share/icons/hicolor/scalable/apps/corpus-querier.svg"
 install -m 644 "$PROJECT_ROOT/LICENSE" \
   "$DEB_ROOT/usr/share/doc/corpus-querier/copyright"
+install -m 755 "$PROJECT_ROOT/linux/postinst" "$DEB_ROOT/DEBIAN/postinst"
+install -m 755 "$PROJECT_ROOT/linux/postrm" "$DEB_ROOT/DEBIAN/postrm"
 
 sed "s/@VERSION@/$VERSION/g" "$PROJECT_ROOT/linux/control.template" \
   > "$DEB_ROOT/DEBIAN/control"

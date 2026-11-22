@@ -14,7 +14,7 @@ ctk.set_default_color_theme("blue")
 
 class ProviderChooser(ctk.CTk):
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(className="CorpusQuerier")
         apply_window_icon(self)
         self.provider: str | None = None
         self.title(f"Corpus Querier {APP_VERSION}")
