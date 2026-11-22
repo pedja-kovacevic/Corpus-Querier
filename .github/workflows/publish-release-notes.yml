@@ -16,6 +16,7 @@ jobs:
   update-release:
     runs-on: ubuntu-22.04
     steps:
+      # Replaces generated appendices so the public release page stays concise.
       - name: Check out release notes
         uses: actions/checkout@v5
       - name: Update the public release page
