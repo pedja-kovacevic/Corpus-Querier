@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - ".github/workflows/publish-release-notes.yml"
-      - "RELEASE_NOTES_3.0.1.md"
+      - "RELEASE_NOTES_3.0.2.md"
 
 permissions:
   contents: write
@@ -22,6 +22,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release edit v3.0.1 \
-            --title "Corpus Querier 3.0.1" \
-            --notes-file RELEASE_NOTES_3.0.1.md
+          gh release edit v3.0.2 \
+            --title "Corpus Querier 3.0.2" \
+            --notes-file RELEASE_NOTES_3.0.2.md
