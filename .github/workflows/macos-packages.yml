@@ -32,7 +32,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
       - name: Run automated tests
-        run: python -m unittest -v test_rnc_cql_translator.py test_corpus_querier_rnc.py test_dataframe_compatibility.py test_clarin_provider.py
+        run: python -m unittest -v test_rnc_cql_translator.py test_corpus_querier_rnc.py test_dataframe_compatibility.py test_clarin_provider.py test_sketchengine_provider.py test_app_identity.py
       - name: Build macOS application
         run: python -m PyInstaller --noconfirm --clean CorpusQuerier.spec
       - name: Package application as a DMG

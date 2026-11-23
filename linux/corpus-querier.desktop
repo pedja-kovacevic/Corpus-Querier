@@ -2,11 +2,11 @@
 Type=Application
 Name=Corpus Querier
 GenericName=Corpus Query Tool
-Comment=Query CLARIN.SI and Russian National Corpus resources
+Comment=Query NoSketch Engine, Sketch Engine and Russian National Corpus resources
 Exec=corpus-querier
 Icon=corpus-querier-data-bird
 Terminal=false
 Categories=Education;Science;DataVisualization;
-Keywords=corpus;linguistics;CQL;CLARIN;RNC;Russian;frequency;word forms;research;
+Keywords=corpus;linguistics;CQL;NoSketch;Sketch Engine;CLARIN;RNC;Russian;frequency;word forms;research;
 StartupNotify=true
 StartupWMClass=CorpusQuerier

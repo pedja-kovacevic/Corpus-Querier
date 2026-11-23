@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import queue
 import re
 import threading
@@ -14,7 +15,7 @@ import customtkinter as ctk
 import pandas as pd
 import requests
 
-from app_identity import APP_VERSION, apply_window_icon, load_brand_image
+from app_identity import APP_VERSION, PeckingBird, apply_window_icon
 
 APP_NAME = "Corpus Querier — CLARIN.SI"
 VIEW_URL = "https://www.clarin.si/ske/bonito/run.cgi/view"
@@ -99,6 +100,11 @@ class JobConfig:
     min_form_frequency: int
     case_sensitive: bool
     output_mode: str
+    provider_name: str = "CLARIN.SI"
+    api_key: str = ""
+    view_url: str = VIEW_URL
+    freqs_url: str = FREQS_URL
+    synchronous: bool = False
 
 
 @dataclass
@@ -129,9 +135,15 @@ class QueryWorker(threading.Thread):
         self.events = events
         self.stop_event = stop_event
         self.session = requests.Session()
-        self.session.headers.update(
-            {"User-Agent": f"Corpus-Querier/{APP_VERSION} (CLARIN.SI research client)"}
-        )
+        self.session.headers.update({
+            "Accept": "application/json",
+            "User-Agent": (
+                f"Corpus-Querier/{APP_VERSION} "
+                f"({config.provider_name} research client)"
+            ),
+        })
+        if config.api_key:
+            self.session.headers["Authorization"] = f"Bearer {config.api_key}"
         self.query_records: list[dict] = []
         self.form_records: list[dict] = []
         self.run_started_at = datetime.now().astimezone()
@@ -215,9 +227,9 @@ class QueryWorker(threading.Thread):
             "q": f"q{cql}",
             "format": "json",
         }
-        endpoint = VIEW_URL
+        endpoint = self.config.view_url
         if needs_forms:
-            endpoint = FREQS_URL
+            endpoint = self.config.freqs_url
             params.update(
                 {
                     # The first token matched by the CQL expression.
@@ -230,6 +242,11 @@ class QueryWorker(threading.Thread):
             )
         else:
             params.update({"pagesize": 1, "ctxattrs": "word,tag"})
+
+        if self.config.synchronous:
+            # Current Sketch Engine uses ``asyn``. Keeping this provider-specific
+            # avoids changing the established CLARIN.SI/NoSketch behaviour.
+            params["asyn"] = 0
 
         full_url = f"{endpoint}?{urllib.parse.urlencode(params)}"
         last_error: Exception | None = None
@@ -244,13 +261,37 @@ class QueryWorker(threading.Thread):
             self.log(f"Attempt {attempt}/{self.config.attempts}")
             self.log(f"Querying: {full_url}")
             try:
-                response = self.session.get(full_url, timeout=self.config.timeout)
+                response = self.session.get(
+                    endpoint,
+                    params=params,
+                    timeout=self.config.timeout,
+                )
+                if response.status_code in {401, 403}:
+                    raise QueryError(
+                        "Authentication failed or this account cannot access "
+                        f"corpus '{self.config.corpus}'."
+                    )
+                if response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    message = "Sketch Engine rate limit reached (HTTP 429)."
+                    if retry_after:
+                        message += f" Retry after {retry_after} seconds."
+                    raise QueryError(message)
                 response.raise_for_status()
                 data = response.json()
-                if "fullsize" not in data:
-                    raise QueryError("Response does not contain 'fullsize'.")
+                if data.get("error"):
+                    raise QueryError(str(data["error"]))
 
-                total = int(data["fullsize"])
+                size_field = next(
+                    (name for name in ("fullsize", "concsize") if name in data),
+                    None,
+                )
+                if size_field is None:
+                    raise QueryError(
+                        "Response does not contain 'fullsize' or 'concsize'."
+                    )
+
+                total = int(data[size_field])
                 totals.append(total)
                 successful_attempts += 1
 
@@ -395,7 +436,10 @@ class QueryWorker(threading.Thread):
             if value == self.config.output_mode
         )
         run_information = [
-            ("Application", f"{APP_NAME} {APP_VERSION}"),
+            (
+                "Application",
+                f"Corpus Querier — {self.config.provider_name} {APP_VERSION}",
+            ),
             ("Corpus", self.config.corpus),
             ("Output type", output_label),
             ("Capitalization", "Sensitive" if self.config.case_sensitive else "Ignored and combined"),
@@ -536,10 +580,29 @@ class QueryWorker(threading.Thread):
 
 
 class CorpusQuerierApp(ctk.CTk):
+    provider_name = "CLARIN.SI"
+    provider_subtitle = "CLARIN.SI corpus research"
+    available_corpora = COMMON_CORPORA
+    default_corpus = "srwac"
+    requires_api_key = False
+    api_key_environment_variable = ""
+    view_url = VIEW_URL
+    freqs_url = FREQS_URL
+    corp_info_url = ""
+    synchronous_queries = False
+
     def __init__(self):
         super().__init__(className="CorpusQuerier")
         apply_window_icon(self)
-        self.title(f"{APP_NAME} {APP_VERSION} · CLARIN.SI")
+        self.app_name = f"Corpus Querier — {self.provider_name}"
+        self.api_key = ctk.StringVar(
+            value=(
+                os.environ.get(self.api_key_environment_variable, "")
+                if self.api_key_environment_variable
+                else ""
+            )
+        )
+        self.title(f"{self.app_name} {APP_VERSION}")
         self.geometry("1220x820")
         self.minsize(1060, 720)
         self.events: queue.Queue = queue.Queue()
@@ -561,13 +624,11 @@ class CorpusQuerierApp(ctk.CTk):
         side = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color=("#E8EEF5", "#111827"))
         side.grid(row=0, column=0, sticky="nsew")
         side.grid_propagate(False)
-        self.sidebar_brand_image = load_brand_image((64, 64))
-        ctk.CTkLabel(side, text="", image=self.sidebar_brand_image).pack(
-            anchor="w", padx=28, pady=(24, 0)
-        )
+        self.pecking_bird = PeckingBird(side)
+        self.pecking_bird.pack(anchor="w", padx=20, pady=(12, 0))
         ctk.CTkLabel(side, text="CORPUS\nQUERIER", font=ctk.CTkFont(size=26, weight="bold"),
-                     justify="left").pack(anchor="w", padx=28, pady=(8, 4))
-        ctk.CTkLabel(side, text=f"CLARIN.SI corpus research · v{APP_VERSION}", text_color=("#526070", "#94A3B8"),
+                     justify="left").pack(anchor="w", padx=28, pady=(2, 4))
+        ctk.CTkLabel(side, text=f"{self.provider_subtitle} · v{APP_VERSION}", text_color=("#526070", "#94A3B8"),
                      font=ctk.CTkFont(size=13)).pack(anchor="w", padx=28, pady=(0, 30))
         self.status_pill = ctk.CTkLabel(side, text="●  READY", fg_color=("#D9F7E8", "#123D2B"),
                                         text_color=("#087443", "#6EE7B7"), corner_radius=12, height=34)
@@ -592,7 +653,8 @@ class CorpusQuerierApp(ctk.CTk):
         main = ctk.CTkFrame(self, fg_color="transparent")
         main.grid(row=0, column=1, sticky="nsew", padx=24, pady=22)
         main.grid_columnconfigure(0, weight=1)
-        main.grid_rowconfigure(2, weight=1)
+        monitor_row = 3 if self.requires_api_key else 2
+        main.grid_rowconfigure(monitor_row, weight=1)
 
         header = ctk.CTkFrame(main, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", pady=(0, 14))
@@ -612,15 +674,19 @@ class CorpusQuerierApp(ctk.CTk):
         self.output_menu.pack(side="right", padx=(10, 14))
         ctk.CTkLabel(header, text="Output").pack(side="right")
 
+        if self.requires_api_key:
+            self._build_authentication(main, row=1)
+
+        tabs_row = 2 if self.requires_api_key else 1
         self.tabs = ctk.CTkTabview(main, height=390)
-        self.tabs.grid(row=1, column=0, sticky="ew")
+        self.tabs.grid(row=tabs_row, column=0, sticky="ew")
         existing = self.tabs.add("Existing CQL spreadsheet")
         generated = self.tabs.add("Generate CQLs")
         self._build_existing(existing)
         self._build_generated(generated)
 
         monitor = ctk.CTkFrame(main)
-        monitor.grid(row=2, column=0, sticky="nsew", pady=(14, 0))
+        monitor.grid(row=monitor_row, column=0, sticky="nsew", pady=(14, 0))
         monitor.grid_columnconfigure(0, weight=1)
         monitor.grid_rowconfigure(3, weight=1)
         top = ctk.CTkFrame(monitor, fg_color="transparent")
@@ -639,6 +705,93 @@ class CorpusQuerierApp(ctk.CTk):
         self.log_box.insert("end", "Ready. Choose an output type, configure the run, and select Start queries.\n")
         self.log_box.configure(state="disabled")
 
+    def _build_authentication(self, parent, row: int) -> None:
+        auth = ctk.CTkFrame(parent)
+        auth.grid(row=row, column=0, sticky="ew", pady=(0, 12))
+        auth.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(auth, text=f"{self.provider_name} API key").grid(
+            row=0, column=0, padx=(16, 10), pady=10
+        )
+        self.api_key_entry = ctk.CTkEntry(
+            auth,
+            textvariable=self.api_key,
+            show="•",
+            placeholder_text="Paste your personal API key; it is kept only in memory",
+        )
+        self.api_key_entry.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=10)
+        self.test_connection_button = ctk.CTkButton(
+            auth,
+            text="Test connection",
+            width=130,
+            command=self._test_connection,
+        )
+        self.test_connection_button.grid(row=0, column=2, padx=(0, 16), pady=10)
+
+    def _selected_corpus(self) -> str:
+        generated = self.tabs.get() == "Generate CQLs"
+        variable = self.generated_corpus if generated else self.existing_corpus
+        return variable.get().strip()
+
+    def _test_connection(self) -> None:
+        key = self.api_key.get().strip()
+        corpus = self._selected_corpus()
+        if not key:
+            messagebox.showerror(self.app_name, f"Paste your {self.provider_name} API key first.")
+            return
+        if not corpus:
+            messagebox.showerror(self.app_name, "Enter a corpus name first.")
+            return
+        if not self.corp_info_url:
+            messagebox.showerror(self.app_name, "This provider has no connection-test endpoint.")
+            return
+
+        self.test_connection_button.configure(state="disabled", text="Testing…")
+
+        def run_test() -> None:
+            error = ""
+            try:
+                response = requests.get(
+                    self.corp_info_url,
+                    params={"corpname": corpus, "format": "json"},
+                    headers={
+                        "Authorization": f"Bearer {key}",
+                        "Accept": "application/json",
+                        "User-Agent": f"Corpus-Querier/{APP_VERSION}",
+                    },
+                    timeout=30,
+                )
+                if response.status_code in {401, 403}:
+                    raise QueryError(
+                        "Authentication failed or this account cannot access "
+                        f"corpus '{corpus}'."
+                    )
+                if response.status_code == 429:
+                    raise QueryError("Sketch Engine rate limit reached (HTTP 429).")
+                response.raise_for_status()
+                data = response.json()
+                if data.get("error"):
+                    raise QueryError(str(data["error"]))
+                if not isinstance(data, dict) or not data:
+                    raise QueryError("The server returned an empty corpus description.")
+            except Exception as exception:
+                error = str(exception)
+
+            def finish() -> None:
+                self.test_connection_button.configure(
+                    state="normal", text="Test connection"
+                )
+                if error:
+                    messagebox.showerror(self.app_name, error)
+                else:
+                    messagebox.showinfo(
+                        self.app_name,
+                        f"Connection successful.\n\nCorpus '{corpus}' is accessible.",
+                    )
+
+            self.after(0, finish)
+
+        threading.Thread(target=run_test, daemon=True).start()
+
     def _entry_row(self, parent, row, label, variable, browse=None, placeholder=""):
         ctk.CTkLabel(parent, text=label).grid(row=row, column=0, sticky="w", padx=(16, 10), pady=7)
         entry = ctk.CTkEntry(parent, textvariable=variable, placeholder_text=placeholder)
@@ -651,14 +804,14 @@ class CorpusQuerierApp(ctk.CTk):
         tab.grid_columnconfigure(1, weight=1)
         self.existing_input = ctk.StringVar()
         self.existing_output = ctk.StringVar()
-        self.existing_corpus = ctk.StringVar(value="srwac")
+        self.existing_corpus = ctk.StringVar(value=self.default_corpus)
         self.existing_columns = ctk.StringVar(value="A")
         self.existing_start = ctk.StringVar(value="1")
         self.existing_end = ctk.StringVar()
         self._entry_row(tab, 0, "Input Excel file", self.existing_input, lambda: self._choose_open(self.existing_input))
         self._entry_row(tab, 1, "Output Excel file", self.existing_output, lambda: self._choose_save(self.existing_output))
         ctk.CTkLabel(tab, text="Corpus").grid(row=2, column=0, sticky="w", padx=(16, 10), pady=7)
-        ctk.CTkComboBox(tab, values=COMMON_CORPORA, variable=self.existing_corpus).grid(row=2, column=1, sticky="ew", padx=(0, 8), pady=7)
+        ctk.CTkComboBox(tab, values=self.available_corpora, variable=self.existing_corpus).grid(row=2, column=1, sticky="ew", padx=(0, 8), pady=7)
         ranges = ctk.CTkFrame(tab, fg_color="transparent")
         ranges.grid(row=3, column=0, columnspan=3, sticky="ew", padx=16, pady=7)
         for i in range(6): ranges.grid_columnconfigure(i, weight=1 if i in {1, 3, 5} else 0)
@@ -676,7 +829,7 @@ class CorpusQuerierApp(ctk.CTk):
         self.word_source = ctk.StringVar(value="spreadsheet")
         self.generated_input = ctk.StringVar()
         self.generated_output = ctk.StringVar()
-        self.generated_corpus = ctk.StringVar(value="srwac")
+        self.generated_corpus = ctk.StringVar(value=self.default_corpus)
         self.word_column = ctk.StringVar(value="A")
         self.generated_start = ctk.StringVar(value="1")
         self.generated_end = ctk.StringVar()
@@ -716,7 +869,7 @@ class CorpusQuerierApp(ctk.CTk):
         lower.grid_columnconfigure(1, weight=1)
         lower.grid_columnconfigure(3, weight=1)
         ctk.CTkLabel(lower, text="Corpus").grid(row=0, column=0, padx=(0, 8))
-        ctk.CTkComboBox(lower, values=COMMON_CORPORA, variable=self.generated_corpus).grid(row=0, column=1, sticky="ew", padx=(0, 15))
+        ctk.CTkComboBox(lower, values=self.available_corpora, variable=self.generated_corpus).grid(row=0, column=1, sticky="ew", padx=(0, 15))
         ctk.CTkLabel(lower, text="Output file").grid(row=0, column=2, padx=(0, 8))
         ctk.CTkEntry(lower, textvariable=self.generated_output).grid(row=0, column=3, sticky="ew", padx=(0, 8))
         ctk.CTkButton(lower, text="Browse", width=78, command=lambda: self._choose_save(self.generated_output)).grid(row=0, column=4)
@@ -804,6 +957,26 @@ class CorpusQuerierApp(ctk.CTk):
         if not corpus: raise ValueError("Enter a corpus name.")
         output_mode = OUTPUT_MODES.get(self.output_mode.get())
         if not output_mode: raise ValueError("Choose a valid output type.")
+        api_key = self.api_key.get().strip()
+        if self.requires_api_key and not api_key:
+            raise ValueError(f"Enter your {self.provider_name} API key.")
+        delay = self._number(advanced["delay"].get(), "Delay")
+        timeout = self._number(advanced["timeout"].get(), "Timeout")
+        attempts = self._number(advanced["attempts"].get(), "Attempts", True)
+        save_interval = self._number(
+            advanced["save"].get(), "Save interval", True
+        )
+        if attempts < 2:
+            raise ValueError(
+                "Attempts must be at least 2; both verification queries are mandatory."
+            )
+        provider_settings = (
+            self.provider_name,
+            api_key,
+            self.view_url,
+            self.freqs_url,
+            self.synchronous_queries,
+        )
         if generated:
             input_text = self.generated_input.get().strip().strip('"')
             input_file = Path(input_text) if self.word_source.get() == "spreadsheet" else None
@@ -817,25 +990,25 @@ class CorpusQuerierApp(ctk.CTk):
             return JobConfig("generated", input_file, output, corpus, [], start, end,
                              self.words_box.get("1.0", "end"), self.word_source.get(),
                              column_letter_to_index(self.word_column.get()), templates,
-                             self._number(advanced["delay"].get(), "Delay"), self._number(advanced["timeout"].get(), "Timeout"),
-                             self._number(advanced["attempts"].get(), "Attempts", True), self._number(advanced["save"].get(), "Save interval", True),
+                             delay, timeout, attempts, save_interval,
                              self._number(advanced["min_frequency"].get(), "Minimum attestations", True),
-                             advanced["case_sensitive"].get(), output_mode)
+                             advanced["case_sensitive"].get(), output_mode,
+                             *provider_settings)
         input_text = self.existing_input.get().strip().strip('"')
         input_file = Path(input_text)
         if not input_text or not input_file.exists(): raise ValueError("Choose a valid input Excel file.")
         return JobConfig("existing", input_file, output, corpus, column_letters_to_indices(self.existing_columns.get()),
                          self._number(self.existing_start.get(), "Start row", True), self._number(self.existing_end.get(), "End row", True, True),
-                         "", "spreadsheet", 0, [], self._number(advanced["delay"].get(), "Delay"),
-                         self._number(advanced["timeout"].get(), "Timeout"), self._number(advanced["attempts"].get(), "Attempts", True),
-                         self._number(advanced["save"].get(), "Save interval", True),
+                         "", "spreadsheet", 0, [], delay,
+                         timeout, attempts, save_interval,
                          self._number(advanced["min_frequency"].get(), "Minimum attestations", True),
-                         advanced["case_sensitive"].get(), output_mode)
+                         advanced["case_sensitive"].get(), output_mode,
+                         *provider_settings)
 
     def _start(self) -> None:
         try: config = self._collect_config()
         except Exception as error:
-            messagebox.showerror(APP_NAME, str(error)); return
+            messagebox.showerror(self.app_name, str(error)); return
         self.stop_event.clear()
         self._reset_monitor()
         self._set_running(True)
@@ -848,10 +1021,16 @@ class CorpusQuerierApp(ctk.CTk):
         self._append_log("\nStop requested. The current request will finish, then results will be saved.\n")
 
     def _set_running(self, running: bool) -> None:
+        self.pecking_bird.set_running(running)
         self.start_button.configure(state="disabled" if running else "normal")
         self.stop_button.configure(state="normal" if running else "disabled")
         self.output_menu.configure(state="disabled" if running else "normal")
         self.tabs.configure(state="disabled" if running else "normal")
+        if self.requires_api_key:
+            self.api_key_entry.configure(state="disabled" if running else "normal")
+            self.test_connection_button.configure(
+                state="disabled" if running else "normal"
+            )
         if running:
             self.status_pill.configure(text="●  RUNNING", fg_color=("#DBEAFE", "#17345C"), text_color=("#1D4ED8", "#93C5FD"))
 
@@ -886,20 +1065,21 @@ class CorpusQuerierApp(ctk.CTk):
                     status = "STOPPED · SAVED" if payload["stopped"] else "COMPLETE"
                     self.status_pill.configure(text=f"●  {status}", fg_color=("#D9F7E8", "#123D2B"), text_color=("#087443", "#6EE7B7"))
                     self.current_label.configure(text=f'Results saved to {payload["output"]}')
-                    messagebox.showinfo(APP_NAME, f'{status.title()}\n\nCompleted: {payload["completed"]:,}\nFailed: {payload["failed"]:,}\nElapsed: {format_duration(payload["elapsed"])}')
+                    messagebox.showinfo(self.app_name, f'{status.title()}\n\nCompleted: {payload["completed"]:,}\nFailed: {payload["failed"]:,}\nElapsed: {format_duration(payload["elapsed"])}')
                 elif kind == "fatal":
                     self._set_running(False)
                     self.status_pill.configure(text="●  ERROR", fg_color=("#FEE2E2", "#4A1515"), text_color=("#B91C1C", "#FCA5A5"))
                     self._append_log(f'\nFatal error: {payload["error"]}')
-                    messagebox.showerror(APP_NAME, payload["error"])
+                    messagebox.showerror(self.app_name, payload["error"])
         except queue.Empty:
             pass
         self.after(100, self._poll_events)
 
     def _close(self) -> None:
         if self.worker and self.worker.is_alive():
-            if not messagebox.askyesno(APP_NAME, "A run is active. Stop, save, and close when possible?"): return
+            if not messagebox.askyesno(self.app_name, "A run is active. Stop, save, and close when possible?"): return
             self.stop_event.set()
+        self.api_key.set("")
         self.destroy()
 
 

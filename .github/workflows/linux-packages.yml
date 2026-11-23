@@ -6,7 +6,7 @@ on:
       version:
         description: Package version
         required: true
-        default: 3.0.2
+        default: 3.1.0
   push:
     tags:
       - "v*"
@@ -32,7 +32,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
       - name: Run automated tests
-        run: python -m unittest -v test_rnc_cql_translator.py test_corpus_querier_rnc.py test_dataframe_compatibility.py test_clarin_provider.py test_linux_packaging.py
+        run: python -m unittest -v test_rnc_cql_translator.py test_corpus_querier_rnc.py test_dataframe_compatibility.py test_clarin_provider.py test_sketchengine_provider.py test_app_identity.py test_linux_packaging.py
       - name: Build standalone Linux application
         run: python -m PyInstaller --noconfirm --clean CorpusQuerier.spec
       - name: Download AppImage packaging tool
@@ -44,7 +44,7 @@ jobs:
         run: |
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             VERSION="${{ inputs.version }}"
-            if [ -z "$VERSION" ]; then VERSION="3.0.2"; fi
+            if [ -z "$VERSION" ]; then VERSION="3.1.0"; fi
           else
             VERSION="${GITHUB_REF_NAME#v}"
           fi
