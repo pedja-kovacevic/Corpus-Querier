@@ -17,7 +17,7 @@ import requests
 
 from app_identity import APP_VERSION, PeckingBird, apply_window_icon
 
-APP_NAME = "Corpus Querier — CLARIN.SI"
+APP_NAME = "Corpus Querier — NoSketch Engine"
 VIEW_URL = "https://www.clarin.si/ske/bonito/run.cgi/view"
 FREQS_URL = "https://www.clarin.si/ske/bonito/run.cgi/freqs"
 DEFAULT_MIN_FORM_FREQUENCY = 1
@@ -100,7 +100,7 @@ class JobConfig:
     min_form_frequency: int
     case_sensitive: bool
     output_mode: str
-    provider_name: str = "CLARIN.SI"
+    provider_name: str = "NoSketch Engine"
     api_key: str = ""
     view_url: str = VIEW_URL
     freqs_url: str = FREQS_URL
@@ -175,7 +175,7 @@ class QueryWorker(threading.Thread):
                 if not form:
                     continue
 
-                # CLARIN.SI Bonito uses "frq"; newer Sketch Engine
+                # This NoSketch Engine Bonito service uses "frq"; newer Sketch Engine
                 # documentation uses "freq". Support both variants.
                 frequency = int(item.get("frq", item.get("freq", 0)))
                 forms[form] = max(forms.get(form, 0), frequency)
@@ -245,7 +245,7 @@ class QueryWorker(threading.Thread):
 
         if self.config.synchronous:
             # Current Sketch Engine uses ``asyn``. Keeping this provider-specific
-            # avoids changing the established CLARIN.SI/NoSketch behaviour.
+            # avoids changing the established NoSketch Engine behaviour.
             params["asyn"] = 0
 
         full_url = f"{endpoint}?{urllib.parse.urlencode(params)}"
@@ -579,9 +579,9 @@ class QueryWorker(threading.Thread):
             self.session.close()
 
 
-class CorpusQuerierApp(ctk.CTk):
-    provider_name = "CLARIN.SI"
-    provider_subtitle = "CLARIN.SI corpus research"
+class CorpusQuerierNoSketchApp(ctk.CTk):
+    provider_name = "NoSketch Engine"
+    provider_subtitle = "NoSketch Engine corpus research"
     available_corpora = COMMON_CORPORA
     default_corpus = "srwac"
     requires_api_key = False
@@ -1084,5 +1084,5 @@ class CorpusQuerierApp(ctk.CTk):
 
 
 if __name__ == "__main__":
-    CorpusQuerierApp().mainloop()
+    CorpusQuerierNoSketchApp().mainloop()
 

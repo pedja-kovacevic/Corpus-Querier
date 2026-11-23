@@ -1,19 +1,19 @@
 """Authenticated Sketch Engine provider for Corpus Querier.
 
-The provider deliberately reuses the CLARIN.SI/Bonito workflow.  The official
-Sketch Engine service speaks the same CQL-based protocol, with authentication
-and synchronous query processing added here as provider-specific settings.
+The provider deliberately reuses the NoSketch Engine/Bonito workflow. The
+official Sketch Engine service speaks the same CQL-based protocol, with
+authentication and synchronous query processing added as provider settings.
 """
 
 from __future__ import annotations
 
-from corpus_querier_clarin import CorpusQuerierApp
+from corpus_querier_noske import CorpusQuerierNoSketchApp
 
 
 SKETCH_ENGINE_ROOT = "https://api.sketchengine.eu/bonito/run.cgi"
 
 
-class CorpusQuerierSketchEngineApp(CorpusQuerierApp):
+class CorpusQuerierSketchEngineApp(CorpusQuerierNoSketchApp):
     provider_name = "Sketch Engine"
     provider_subtitle = "Authenticated Sketch Engine research"
     available_corpora = [

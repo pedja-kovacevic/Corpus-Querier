@@ -57,12 +57,12 @@ if sys.platform == "darwin":
     app = BUNDLE(
         exe,
         name="Corpus Querier.app",
-        bundle_identifier="si.clarin.corpusquerier",
+        bundle_identifier="io.github.pedjakovacevic.corpusquerier",
         icon="assets/corpus-querier.png",
         info_plist={
             "CFBundleDisplayName": "Corpus Querier",
-            "CFBundleShortVersionString": "3.1.3",
-            "CFBundleVersion": "3.1.3",
+            "CFBundleShortVersionString": "3.1.4",
+            "CFBundleVersion": "3.1.4",
             "NSHighResolutionCapable": True,
         },
     )

@@ -1,24 +1,25 @@
 # Corpus Querier 3.1
 
-Corpus Querier is a cross-platform desktop application for reproducible batch
-corpus research. Version 3.1 combines NoSketch Engine/CLARIN.SI, the official
-Sketch Engine API, and the Russian National Corpus public API in one interface.
+Corpus Querier is an independent, cross-platform desktop application for
+reproducible batch corpus research. Version 3.1 combines NoSketch Engine,
+the official Sketch Engine API, and the Russian National Corpus public API in
+one interface.
 
 The opening screen asks the user to choose a provider:
 
-- **NoSketch Engine** — CLARIN.SI-hosted Bonito CQL searches;
+- **NoSketch Engine** — public Bonito CQL searches;
 - **Sketch Engine** — authenticated official API searches, including the BNC;
 - **Russian National Corpus** — native RNC lexical–grammatical searches.
 
 ## Download and install
 
-Open the [latest GitHub release](https://github.com/pedja-kovacevic/Corpus-Querier-CLARIN/releases/latest)
+Open the [latest GitHub release](https://github.com/pedja-kovacevic/Corpus-Querier/releases/latest)
 and download the package for your system:
 
 | Platform | Download |
 |---|---|
 | Windows | `Corpus-Querier-Setup.exe` |
-| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.1.3_amd64.deb` |
+| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.1.4_amd64.deb` |
 | Linux portable | `Corpus-Querier-x86_64.AppImage` |
 | macOS Apple Silicon | `Corpus-Querier-macOS-arm64.dmg` |
 | macOS Intel | `Corpus-Querier-macOS-x86_64.dmg` |
@@ -48,7 +49,7 @@ at each peck.
 
 ### NoSketch Engine provider
 
-- any available corpus name on the connected CLARIN.SI NoSketch Engine service;
+- any available corpus name on the connected NoSketch Engine service;
 - standard CQL input;
 - exact total query frequency;
 - exact form lists and form frequencies returned by the Bonito frequency
@@ -146,7 +147,7 @@ The release is checked with the following automated and manual tests:
 
 1. **Automated tests**
    - translator and response-parser tests pass;
-   - CLARIN v2 regression tests pass;
+   - NoSketch Engine regression tests pass;
    - spreadsheet cells accept totals and error markers;
    - all three packaging workflows complete.
 2. **NoSketch Engine smoke test**
@@ -192,11 +193,13 @@ is sufficient once the shared source build has passed automated tests.
 
 The GitHub Actions workflows can be run manually against a development branch.
 They upload installable artifacts without publishing a release. Versioned
-packages are attached automatically when a release tag such as `v3.1.3` is
+packages are attached automatically when a release tag such as `v3.1.4` is
 pushed.
 
-## License and acknowledgment
+## Service independence and acknowledgment
 
-Corpus Querier is released under the MIT License. CLARIN.SI, Sketch Engine and
-the Russian National Corpus provide the corpus-querying infrastructure used by
-the app.
+Corpus Querier is released under the MIT License. It is independently developed
+and is not affiliated with or endorsed by any corpus provider. The NoSketch
+Engine module currently connects to a Bonito server at `www.clarin.si`; that
+domain is retained only as factual technical endpoint information. Sketch
+Engine and the Russian National Corpus provide their respective query APIs.
