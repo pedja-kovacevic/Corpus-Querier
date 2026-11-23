@@ -11,7 +11,7 @@ from PIL import Image, ImageChops, ImageDraw
 
 
 APP_NAME = "Corpus Querier"
-APP_VERSION = "3.1.0"
+APP_VERSION = "3.1.1"
 
 
 def resource_path(relative_path: str) -> Path:
@@ -74,99 +74,85 @@ def _load_bird_layer() -> Image.Image:
     )
 
 
-class PeckingBird(ctk.CTkFrame):
-    """A restrained in-app animation built from the shared data-bird mark."""
+_SIDEBAR_LIGHT = (232, 238, 245, 255)
+_SIDEBAR_DARK = (17, 24, 39, 255)
+
+
+def _render_pecking_frame(angle: float, contact: bool, background: tuple[int, ...]) -> Image.Image:
+    """Render one seamless animation frame on the sidebar's exact colour.
+
+    The whole bird/platform composition is rasterized into one opaque image.
+    This avoids the black transparency rectangle that some packaged Tk/Pillow
+    combinations display around moving transparent labels.
+    """
+
+    width, height = 210, 205
+    rgba = tuple(background[:3]) + (255,)
+    frame = Image.new("RGBA", (width, height), rgba)
+    draw = ImageDraw.Draw(frame)
+    draw.rounded_rectangle((6, 170, 204, 202), radius=16, fill=(10, 49, 88, 255))
+    for x in (36, 68, 100, 132, 164):
+        colour = (255, 176, 0, 255) if contact and x == 132 else (24, 209, 207, 255)
+        radius = 10 if contact and x == 132 else 8
+        centre_x = x + 8
+        centre_y = 186
+        draw.ellipse(
+            (centre_x - radius, centre_y - radius, centre_x + radius, centre_y + radius),
+            fill=colour,
+        )
+
+    bird = _load_bird_layer().resize((154, 170), Image.Resampling.LANCZOS)
+    bird_stage = Image.new("RGBA", frame.size, (0, 0, 0, 0))
+    bird_stage.alpha_composite(bird, (18, 3))
+    # Pivot close to the bird's feet/tail. A small clockwise rotation moves the
+    # head and beak towards the data point while the body stays grounded.
+    bird_stage = bird_stage.rotate(
+        angle,
+        resample=Image.Resampling.BICUBIC,
+        center=(58, 160),
+        expand=False,
+    )
+    frame.alpha_composite(bird_stage)
+    return frame
+
+
+class PeckingBird(ctk.CTkLabel):
+    """A seamless, restrained tilt animation built from the data-bird mark."""
 
     WIDTH = 210
     HEIGHT = 205
-    _REST_Y = 12
-    _CONTACT_Y = 24
-    _FRAME_DELAY_MS = 82
-    _POSITIONS = (10, 10, 11, 13, 16, 20, 24, 24, 21, 18, 15, 12)
+    _FRAME_DELAY_MS = 95
+    _ANGLES = (0.0, 0.0, -1.0, -2.5, -4.0, -6.0, -6.0, -4.0, -2.0, 0.0, 0.0)
 
     def __init__(self, master) -> None:
+        self._frames: list[ctk.CTkImage] = []
+        for angle in self._ANGLES:
+            contact = angle <= -5.5
+            self._frames.append(
+                ctk.CTkImage(
+                    light_image=_render_pecking_frame(angle, contact, _SIDEBAR_LIGHT),
+                    dark_image=_render_pecking_frame(angle, contact, _SIDEBAR_DARK),
+                    size=(self.WIDTH, self.HEIGHT),
+                )
+            )
         super().__init__(
             master,
+            text="",
             width=self.WIDTH,
             height=self.HEIGHT,
-            fg_color="transparent",
+            corner_radius=0,
+            fg_color=("#E8EEF5", "#111827"),
+            image=self._frames[0],
         )
-        self.pack_propagate(False)
-        self.grid_propagate(False)
         self._running = False
         self._frame = 0
         self._after_id: str | None = None
 
-        platform = ctk.CTkFrame(
-            self,
-            width=198,
-            height=32,
-            corner_radius=16,
-            fg_color=("#123F6A", "#0A3158"),
-        )
-        platform.place(x=6, y=170)
-
-        for x in (36, 68, 100, 132, 164):
-            dot = ctk.CTkLabel(
-                self,
-                text="",
-                width=16,
-                height=16,
-                corner_radius=8,
-                fg_color=("#12C9C9", "#18D1CF"),
-            )
-            dot.place(x=x, y=178)
-
-        self._contact_dot = ctk.CTkLabel(
-            self,
-            text="",
-            width=16,
-            height=16,
-            corner_radius=8,
-            fg_color=("#12C9C9", "#18D1CF"),
-        )
-        self._contact_dot.place(x=132, y=178)
-
-        bird = _load_bird_layer()
-        self._bird_image = ctk.CTkImage(
-            light_image=bird,
-            dark_image=bird,
-            size=(154, 170),
-        )
-        self._bird = ctk.CTkLabel(
-            self,
-            text="",
-            image=self._bird_image,
-            fg_color="transparent",
-        )
-        self._bird.place(x=18, y=self._REST_Y)
-        self._show_contact(False)
-
-    def _show_contact(self, active: bool) -> None:
-        if active:
-            self._contact_dot.configure(
-                width=20,
-                height=20,
-                corner_radius=10,
-                fg_color=("#FFB000", "#FFB000"),
-            )
-            self._contact_dot.place(x=130, y=176)
-        else:
-            self._contact_dot.configure(
-                width=16,
-                height=16,
-                corner_radius=8,
-                fg_color=("#12C9C9", "#18D1CF"),
-            )
-            self._contact_dot.place(x=132, y=178)
-
     def _animate(self) -> None:
         if not self._running:
             return
-        y = self._POSITIONS[self._frame]
-        self._bird.place_configure(y=y)
-        self._show_contact(y >= self._CONTACT_Y)
-        self._frame = (self._frame + 1) % len(self._POSITIONS)
+        self.configure(image=self._frames[self._frame])
+        self._frame = (self._frame + 1) % len(self._frames)
         self._after_id = self.after(self._FRAME_DELAY_MS, self._animate)
 
     def set_running(self, running: bool) -> None:
@@ -186,8 +172,8 @@ class PeckingBird(ctk.CTkFrame):
                 except tk.TclError:
                     pass
             self._after_id = None
-            self._bird.place_configure(y=self._REST_Y)
-            self._show_contact(False)
+            self._frame = 0
+            self.configure(image=self._frames[0])
 
     def destroy(self) -> None:
         self._running = False

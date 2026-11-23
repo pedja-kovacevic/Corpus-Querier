@@ -1,11 +1,17 @@
 import unittest
 
-from app_identity import APP_VERSION, PeckingBird, _load_bird_layer
+from app_identity import (
+    APP_VERSION,
+    PeckingBird,
+    _SIDEBAR_DARK,
+    _load_bird_layer,
+    _render_pecking_frame,
+)
 
 
 class AppIdentityTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION, "3.1.0")
+        self.assertEqual(APP_VERSION, "3.1.1")
 
     def test_bird_layer_is_nonempty_rgba(self):
         image = _load_bird_layer()
@@ -13,11 +19,18 @@ class AppIdentityTests(unittest.TestCase):
         self.assertIsNotNone(image.getbbox())
         self.assertGreater(image.width, image.height // 2)
 
-    def test_animation_has_rest_lift_and_contact_frames(self):
-        positions = PeckingBird._POSITIONS
-        self.assertLess(min(positions), PeckingBird._REST_Y)
-        self.assertEqual(max(positions), PeckingBird._CONTACT_Y)
-        self.assertGreaterEqual(positions.count(PeckingBird._CONTACT_Y), 2)
+    def test_animation_tilts_instead_of_moving_vertically(self):
+        angles = PeckingBird._ANGLES
+        self.assertEqual(angles[0], 0.0)
+        self.assertLess(min(angles), 0.0)
+        self.assertGreaterEqual(angles.count(min(angles)), 2)
+
+    def test_rendered_frames_are_seamless_with_sidebar(self):
+        rest = _render_pecking_frame(0.0, False, _SIDEBAR_DARK)
+        contact = _render_pecking_frame(-6.0, True, _SIDEBAR_DARK)
+        self.assertEqual(rest.getpixel((0, 0)), _SIDEBAR_DARK)
+        self.assertEqual(contact.getpixel((209, 204)), _SIDEBAR_DARK)
+        self.assertNotEqual(rest.tobytes(), contact.tobytes())
 
 
 if __name__ == "__main__":

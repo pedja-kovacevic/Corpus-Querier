@@ -20,6 +20,7 @@ from rnc_provider import (
     AUTH_CHECK_URL,
     CONCORDANCE_URL,
     ConcordanceResult,
+    RNCError,
     SubcorpusFilters,
     build_subcorpus,
     filter_form_counts,
@@ -36,6 +37,8 @@ COMMON_CORPORA = [
     "OLD_RUS", "MID_RUS", "BIRCHBARK", "ORTHLIB", "EPIGRAPHICA",
 ]
 PLACEHOLDER_RE = re.compile(r"\{(?:WORD|LEMMA)\}|\b(?:WORD|LEMMA)\b")
+TRANSPORT_RETRY_DELAYS = (2, 5, 10, 20, 30, 60, 120, 300)
+RETRYABLE_HTTP_STATUS = {408, 425, 429, 500, 502, 503, 504}
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -166,12 +169,35 @@ class QueryWorker(threading.Thread):
         self.stop_event = stop_event
         self.form_rows: list[dict] = []
         self.concordance_rows: list[dict] = []
-        self.session = requests.Session()
-        self.session.headers.update({
+        self._session_headers = {
             "Authorization": f"Bearer {config.token}",
             "Accept": "application/json",
             "User-Agent": f"Corpus-Querier-RNC/{APP_VERSION}",
-        })
+        }
+        self.session = self._new_session()
+
+    def _new_session(self) -> requests.Session:
+        session = requests.Session()
+        session.headers.update(self._session_headers)
+        return session
+
+    def _renew_session(self) -> None:
+        """Discard a socket pool after a reset and continue with a fresh one."""
+
+        try:
+            self.session.close()
+        finally:
+            self.session = self._new_session()
+
+    @staticmethod
+    def _retry_delay(response: requests.Response | None, retry_index: int) -> float:
+        if response is not None and response.status_code == 429:
+            retry_after = response.headers.get("Retry-After", "").strip()
+            try:
+                return max(1.0, min(float(retry_after), 300.0))
+            except ValueError:
+                return 30.0
+        return float(TRANSPORT_RETRY_DELAYS[min(retry_index, len(TRANSPORT_RETRY_DELAYS) - 1)])
 
     def emit(self, kind: str, **payload) -> None:
         self.events.put((kind, payload))
@@ -190,39 +216,88 @@ class QueryWorker(threading.Thread):
             for warning in report.warnings:
                 self.log(f"Translation warning: {warning}")
         valid_results: list[ConcordanceResult] = []
-        last_error: Exception | None = None
         started = time.monotonic()
 
         for attempt in range(1, self.config.attempts + 1):
             if self.stop_event.is_set():
                 raise InterruptedError
-            self.log(f"Attempt {attempt}/{self.config.attempts}")
-            self.log(f"POST {BASE_URL}")
-            try:
-                response = self.session.post(BASE_URL, json=payload, timeout=self.config.timeout)
-                if response.status_code == 401:
-                    raise QueryError("Authentication failed. Check or regenerate the RNC API token.")
-                response.raise_for_status()
-                result = parse_concordance_response(response.json())
-                valid_results.append(result)
-                if result.total_occurrences == 0:
-                    self.log(
-                        f"Occurrences on attempt {attempt}: 0 "
-                        "(confirmed zero-result response)"
+            transport_retry = 0
+            while True:
+                if self.stop_event.is_set():
+                    raise InterruptedError
+                suffix = "" if transport_retry == 0 else f" (network retry {transport_retry})"
+                self.log(f"Attempt {attempt}/{self.config.attempts}{suffix}")
+                self.log(f"POST {BASE_URL}")
+                response: requests.Response | None = None
+                try:
+                    response = self.session.post(
+                        BASE_URL,
+                        json=payload,
+                        timeout=self.config.timeout,
                     )
-                else:
-                    self.log(
-                        f"Occurrences on attempt {attempt}: "
-                        f"{result.total_occurrences:,} in {result.matching_texts:,} texts"
+                    if response.status_code == 401:
+                        raise QueryError(
+                            "Authentication failed. Check or regenerate the RNC API token."
+                        )
+                    if response.status_code in RETRYABLE_HTTP_STATUS:
+                        raise requests.HTTPError(
+                            f"RNC returned retryable HTTP {response.status_code}.",
+                            response=response,
+                        )
+                    response.raise_for_status()
+                    result = parse_concordance_response(response.json())
+                    valid_results.append(result)
+                    if result.total_occurrences == 0:
+                        self.log(
+                            f"Occurrences on attempt {attempt}: 0 "
+                            "(confirmed zero-result response)"
+                        )
+                    else:
+                        self.log(
+                            f"Occurrences on attempt {attempt}: "
+                            f"{result.total_occurrences:,} in {result.matching_texts:,} texts"
+                        )
+                    break
+                except QueryError:
+                    raise
+                except (requests.ConnectionError, requests.Timeout) as error:
+                    retryable = True
+                    failure = error
+                    self._renew_session()
+                except requests.HTTPError as error:
+                    retryable = (
+                        error.response is not None
+                        and error.response.status_code in RETRYABLE_HTTP_STATUS
                     )
-            except Exception as error:
-                last_error = error
-                self.log(f"Error: {error}")
+                    failure = error
+                except requests.exceptions.JSONDecodeError as error:
+                    retryable = True
+                    failure = error
+                except RNCError as error:
+                    raise QueryError(str(error)) from error
+                except Exception as error:
+                    raise QueryError(str(error)) from error
+
+                if not retryable:
+                    raise QueryError(str(failure)) from failure
+                delay = self._retry_delay(response, transport_retry)
+                transport_retry += 1
+                self.log(
+                    f"Transient connection failure: {failure}\n"
+                    f"The remote service is unavailable. Retrying the same required "
+                    f"attempt in {delay:g} seconds (network retry {transport_retry}). "
+                    "Press Stop & save to pause safely."
+                )
+                if self.stop_event.wait(delay):
+                    raise InterruptedError
             if attempt < self.config.attempts and self.stop_event.wait(1):
                 raise InterruptedError
 
-        if not valid_results:
-            raise QueryError(str(last_error or "All query attempts failed."))
+        if len(valid_results) != self.config.attempts:
+            raise QueryError(
+                f"The query returned only {len(valid_results)} of "
+                f"{self.config.attempts} required successful results."
+            )
         best = max(
             valid_results,
             key=lambda item: (

@@ -2,6 +2,11 @@ name: Publish release notes
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version without the v prefix
+        required: true
+        default: 3.1.1
 
 permissions:
   contents: write
@@ -16,7 +21,11 @@ jobs:
       - name: Update the public release page
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
         run: |
-          gh release edit v3.1.0 \
-            --title "Corpus Querier 3.1.0" \
-            --notes-file RELEASE_NOTES_3.1.0.md
+          NOTES_FILE="RELEASE_NOTES_${VERSION}.md"
+          test -f "$NOTES_FILE"
+          gh release edit "v${VERSION}" \
+            --title "Corpus Querier ${VERSION}" \
+            --notes-file "$NOTES_FILE" \
+            --latest

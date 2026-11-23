@@ -429,7 +429,7 @@ class RNCClient:
         self.session.headers.update({
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
-            "User-Agent": "Corpus-Querier-RNC/3.1.0",
+            "User-Agent": "Corpus-Querier-RNC/3.1.1",
         })
 
     def close(self) -> None:
