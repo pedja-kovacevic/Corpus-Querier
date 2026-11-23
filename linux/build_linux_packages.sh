@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-3.1.2}"
+VERSION="${1:-3.1.3}"
 if [[ ! "$VERSION" =~ ^[0-9]+([.][0-9]+)*([+-][A-Za-z0-9.]+)?$ ]]; then
-  VERSION="3.1.2"
+  VERSION="3.1.3"
 fi
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,6 +12,7 @@ OUTPUT_DIR="$PROJECT_ROOT/linux-output"
 APPDIR="$PROJECT_ROOT/build-linux/Corpus-Querier.AppDir"
 DEB_ROOT="$PROJECT_ROOT/build-linux/deb-root"
 ICON_ID="corpus-querier-data-bird"
+ICON_ALIASES=(corpus-querier corpus-querier-data-bird CorpusQuerier)
 ICON_SIZES=(16 24 32 48 64 128 256 512)
 
 if [[ ! -x "$APP_BINARY" ]]; then
@@ -35,17 +36,21 @@ install -m 644 "$PROJECT_ROOT/linux/corpus-querier.desktop" \
 install -m 644 "$PROJECT_ROOT/linux/corpus-querier.desktop" \
   "$APPDIR/usr/share/applications/corpus-querier.desktop"
 install -m 644 "$PROJECT_ROOT/assets/linux-icons/512x512/$ICON_ID.png" \
-  "$APPDIR/$ICON_ID.png"
-ln -s "$ICON_ID.png" "$APPDIR/.DirIcon"
+  "$APPDIR/corpus-querier.png"
+ln -s "corpus-querier.png" "$APPDIR/.DirIcon"
 for size in "${ICON_SIZES[@]}"; do
   icon_dir="$APPDIR/usr/share/icons/hicolor/${size}x${size}/apps"
   mkdir -p "$icon_dir"
-  install -m 644 \
-    "$PROJECT_ROOT/assets/linux-icons/${size}x${size}/$ICON_ID.png" \
-    "$icon_dir/$ICON_ID.png"
+  for icon_alias in "${ICON_ALIASES[@]}"; do
+    install -m 644 \
+      "$PROJECT_ROOT/assets/linux-icons/${size}x${size}/$ICON_ID.png" \
+      "$icon_dir/$icon_alias.png"
+  done
 done
-install -m 644 "$PROJECT_ROOT/assets/linux-icons/512x512/$ICON_ID.png" \
-  "$APPDIR/usr/share/pixmaps/$ICON_ID.png"
+for icon_alias in "${ICON_ALIASES[@]}"; do
+  install -m 644 "$PROJECT_ROOT/assets/linux-icons/512x512/$ICON_ID.png" \
+    "$APPDIR/usr/share/pixmaps/$icon_alias.png"
+done
 
 ARCH=x86_64 VERSION="$VERSION" \
   "$PROJECT_ROOT/appimagetool-x86_64.AppImage" --appimage-extract-and-run \
@@ -60,17 +65,22 @@ mkdir -p \
   "$DEB_ROOT/usr/share/pixmaps" \
   "$DEB_ROOT/usr/share/doc/corpus-querier"
 install -m 755 "$APP_BINARY" "$DEB_ROOT/usr/bin/corpus-querier"
-install -m 644 "$PROJECT_ROOT/linux/corpus-querier.desktop" \
-  "$DEB_ROOT/usr/share/applications/corpus-querier.desktop"
+sed 's|^Icon=.*|Icon=/usr/share/pixmaps/corpus-querier.png|' \
+  "$PROJECT_ROOT/linux/corpus-querier.desktop" \
+  > "$DEB_ROOT/usr/share/applications/corpus-querier.desktop"
 for size in "${ICON_SIZES[@]}"; do
   icon_dir="$DEB_ROOT/usr/share/icons/hicolor/${size}x${size}/apps"
   mkdir -p "$icon_dir"
-  install -m 644 \
-    "$PROJECT_ROOT/assets/linux-icons/${size}x${size}/$ICON_ID.png" \
-    "$icon_dir/$ICON_ID.png"
+  for icon_alias in "${ICON_ALIASES[@]}"; do
+    install -m 644 \
+      "$PROJECT_ROOT/assets/linux-icons/${size}x${size}/$ICON_ID.png" \
+      "$icon_dir/$icon_alias.png"
+  done
 done
-install -m 644 "$PROJECT_ROOT/assets/linux-icons/512x512/$ICON_ID.png" \
-  "$DEB_ROOT/usr/share/pixmaps/$ICON_ID.png"
+for icon_alias in "${ICON_ALIASES[@]}"; do
+  install -m 644 "$PROJECT_ROOT/assets/linux-icons/512x512/$ICON_ID.png" \
+    "$DEB_ROOT/usr/share/pixmaps/$icon_alias.png"
+done
 install -m 644 "$PROJECT_ROOT/LICENSE" \
   "$DEB_ROOT/usr/share/doc/corpus-querier/copyright"
 install -m 755 "$PROJECT_ROOT/linux/postinst" "$DEB_ROOT/DEBIAN/postinst"
