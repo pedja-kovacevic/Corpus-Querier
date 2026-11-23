@@ -15,7 +15,7 @@ import customtkinter as ctk
 import pandas as pd
 import requests
 
-from app_identity import APP_VERSION, apply_window_icon, load_brand_image
+from app_identity import APP_VERSION, PeckingBird, apply_window_icon
 
 APP_NAME = "Corpus Querier — CLARIN.SI"
 VIEW_URL = "https://www.clarin.si/ske/bonito/run.cgi/view"
@@ -624,12 +624,10 @@ class CorpusQuerierApp(ctk.CTk):
         side = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color=("#E8EEF5", "#111827"))
         side.grid(row=0, column=0, sticky="nsew")
         side.grid_propagate(False)
-        self.sidebar_brand_image = load_brand_image((64, 64))
-        ctk.CTkLabel(side, text="", image=self.sidebar_brand_image).pack(
-            anchor="w", padx=28, pady=(24, 0)
-        )
+        self.pecking_bird = PeckingBird(side)
+        self.pecking_bird.pack(anchor="w", padx=20, pady=(12, 0))
         ctk.CTkLabel(side, text="CORPUS\nQUERIER", font=ctk.CTkFont(size=26, weight="bold"),
-                     justify="left").pack(anchor="w", padx=28, pady=(8, 4))
+                     justify="left").pack(anchor="w", padx=28, pady=(2, 4))
         ctk.CTkLabel(side, text=f"{self.provider_subtitle} · v{APP_VERSION}", text_color=("#526070", "#94A3B8"),
                      font=ctk.CTkFont(size=13)).pack(anchor="w", padx=28, pady=(0, 30))
         self.status_pill = ctk.CTkLabel(side, text="●  READY", fg_color=("#D9F7E8", "#123D2B"),
@@ -1023,6 +1021,7 @@ class CorpusQuerierApp(ctk.CTk):
         self._append_log("\nStop requested. The current request will finish, then results will be saved.\n")
 
     def _set_running(self, running: bool) -> None:
+        self.pecking_bird.set_running(running)
         self.start_button.configure(state="disabled" if running else "normal")
         self.stop_button.configure(state="normal" if running else "disabled")
         self.output_menu.configure(state="disabled" if running else "normal")

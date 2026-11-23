@@ -80,6 +80,13 @@ where the app emits no spaces around `|`.
 The result cell contains `queryStats.wordUsageCount`. This is the exact total
 reported by the API and preserves the original Corpus Querier output style.
 
+A successful response containing an explicit count of zero is saved as numeric
+`0`. The RNC may also omit `wordUsageCount` for an empty concordance; Corpus
+Querier accepts that case as zero only when the response contains an empty
+`groups` list plus an explicit zero-valued text, document or pagination signal.
+Missing or malformed counts without that evidence remain `ERROR`, so server and
+response failures are not silently converted into linguistic zeroes.
+
 ### Exact total + sampled forms
 
 The **Results** sheet contains exact totals. Two additional long-format sheets
@@ -124,5 +131,6 @@ python -m unittest -v
 - stop-and-save;
 - progress, elapsed time, and ETA;
 - validation before the batch starts.
+- explicit separation of confirmed zero results from malformed responses.
 
 The API token is never embedded in an installer or repository.

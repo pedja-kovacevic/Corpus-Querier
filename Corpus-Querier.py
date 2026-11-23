@@ -49,8 +49,8 @@ class ProviderChooser(ctk.CTk):
         self._provider_card(
             cards,
             column=0,
-            title="CLARIN.SI",
-            subtitle="Sketch Engine / Bonito corpora",
+            title="NoSketch Engine",
+            subtitle="CLARIN.SI-hosted Bonito corpora",
             description=(
                 "Run CQL queries, obtain exact total frequencies, and extract "
                 "complete form-frequency lists from supported CLARIN.SI corpora."

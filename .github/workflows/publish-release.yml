@@ -6,7 +6,7 @@ on:
       version:
         description: Semantic version without the v prefix
         required: true
-        default: 3.0.2
+        default: 3.1.0
   push:
     branches:
       - main
@@ -31,7 +31,7 @@ jobs:
           REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           VERSION="$REQUESTED_VERSION"
-          if [ -z "$VERSION" ]; then VERSION="3.0.2"; fi
+          if [ -z "$VERSION" ]; then VERSION="3.1.0"; fi
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid semantic version: $VERSION" >&2
             exit 1

@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from rnc_provider import (
+    RNCError,
     SubcorpusFilters,
     build_subcorpus,
     canonicalize_formula,
@@ -51,6 +52,39 @@ class ProviderTests(unittest.TestCase):
             filter_form_counts({"Папа": 2, "папа": 3, "папы": 1}, minimum=2, ignore_case=True),
             {"папа": 5},
         )
+
+    def test_explicit_zero_count_is_a_success(self):
+        result = parse_concordance_response({
+            "queryStats": {"wordUsageCount": 0, "textCount": 0},
+            "groups": [],
+            "pagination": {"totalPageCount": 0, "maxAvailablePage": 0},
+        })
+        self.assertEqual(result.total_occurrences, 0)
+        self.assertEqual(result.matching_texts, 0)
+
+    def test_confirmed_empty_response_without_count_is_zero(self):
+        result = parse_concordance_response({
+            "queryStats": {"textCount": 0},
+            "groups": [],
+            "pagination": {"totalPageCount": 0, "maxAvailablePage": 0},
+        })
+        self.assertEqual(result.total_occurrences, 0)
+
+    def test_missing_count_without_empty_evidence_is_an_error(self):
+        with self.assertRaises(RNCError):
+            parse_concordance_response({
+                "queryStats": {},
+                "groups": [],
+                "pagination": {},
+            })
+
+    def test_nonempty_groups_without_count_is_an_error(self):
+        with self.assertRaises(RNCError):
+            parse_concordance_response({
+                "queryStats": {"textCount": 0},
+                "groups": [{"docs": []}],
+                "pagination": {"totalPageCount": 0},
+            })
 
     def test_saved_real_response(self):
         fixture = Path(__file__).with_name("upload") / "rnc-response-pretty.json"

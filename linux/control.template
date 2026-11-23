@@ -5,7 +5,7 @@ Priority: optional
 Architecture: amd64
 Maintainer: Predrag Kovačević
 Depends: libc6 (>= 2.35), libx11-6, libxext6, libxrender1, libxft2, libfontconfig1, libfreetype6, libxcb1, zlib1g
-Description: Desktop corpus research tool for CLARIN.SI and the RNC
- Corpus Querier runs CLARIN.SI CQL and Russian National Corpus lexical-
- grammatical searches. It supports batch spreadsheets, reusable templates,
- exact totals, form results and provider-specific research metadata.
+Description: Desktop corpus research tool for NoSketch Engine, Sketch Engine and RNC
+ Corpus Querier runs NoSketch Engine and authenticated Sketch Engine CQL,
+ plus Russian National Corpus lexical-grammatical searches. It supports batch
+ spreadsheets, reusable templates, exact totals and form results.

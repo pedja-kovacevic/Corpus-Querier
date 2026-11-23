@@ -14,7 +14,7 @@ import customtkinter as ctk
 import pandas as pd
 import requests
 
-from app_identity import APP_VERSION, apply_window_icon, load_brand_image
+from app_identity import APP_VERSION, PeckingBird, apply_window_icon
 from rnc_cql_translator import TranslationError, translate_cql
 from rnc_provider import (
     AUTH_CHECK_URL,
@@ -205,10 +205,16 @@ class QueryWorker(threading.Thread):
                 response.raise_for_status()
                 result = parse_concordance_response(response.json())
                 valid_results.append(result)
-                self.log(
-                    f"Occurrences on attempt {attempt}: "
-                    f"{result.total_occurrences:,} in {result.matching_texts:,} texts"
-                )
+                if result.total_occurrences == 0:
+                    self.log(
+                        f"Occurrences on attempt {attempt}: 0 "
+                        "(confirmed zero-result response)"
+                    )
+                else:
+                    self.log(
+                        f"Occurrences on attempt {attempt}: "
+                        f"{result.total_occurrences:,} in {result.matching_texts:,} texts"
+                    )
             except Exception as error:
                 last_error = error
                 self.log(f"Error: {error}")
@@ -427,12 +433,10 @@ class CorpusQuerierRNCApp(ctk.CTk):
         side = ctk.CTkFrame(self, width=250, corner_radius=0, fg_color=("#E8EEF5", "#111827"))
         side.grid(row=0, column=0, sticky="nsew")
         side.grid_propagate(False)
-        self.sidebar_brand_image = load_brand_image((64, 64))
-        ctk.CTkLabel(side, text="", image=self.sidebar_brand_image).pack(
-            anchor="w", padx=28, pady=(24, 0)
-        )
+        self.pecking_bird = PeckingBird(side)
+        self.pecking_bird.pack(anchor="w", padx=20, pady=(12, 0))
         ctk.CTkLabel(side, text="CORPUS\nQUERIER", font=ctk.CTkFont(size=26, weight="bold"),
-                     justify="left").pack(anchor="w", padx=28, pady=(8, 4))
+                     justify="left").pack(anchor="w", padx=28, pady=(2, 4))
         ctk.CTkLabel(side, text="Russian National Corpus", text_color=("#526070", "#94A3B8"),
                      font=ctk.CTkFont(size=13)).pack(anchor="w", padx=28, pady=(0, 30))
         self.status_pill = ctk.CTkLabel(side, text="●  READY", fg_color=("#D9F7E8", "#123D2B"),
@@ -944,6 +948,7 @@ class CorpusQuerierRNCApp(ctk.CTk):
         self._append_log("\nStop requested. The current request will finish, then results will be saved.\n")
 
     def _set_running(self, running: bool) -> None:
+        self.pecking_bird.set_running(running)
         self.start_button.configure(state="disabled" if running else "normal")
         self.stop_button.configure(state="normal" if running else "disabled")
         self.tabs.configure(state="disabled" if running else "normal")

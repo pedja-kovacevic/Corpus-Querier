@@ -266,6 +266,38 @@ def _document_metadata(document: dict[str, Any]) -> dict[str, str]:
     return metadata
 
 
+def _is_confirmed_empty_result(data: dict[str, Any], stats: dict[str, Any]) -> bool:
+    """Recognize a successful empty concordance without masking malformed data.
+
+    The RNC may omit ``wordUsageCount`` for a genuine no-match response. We
+    accept that omission as zero only when the response also supplies both an
+    empty concordance and an explicit zero-valued result signal. A merely
+    missing field is still an error.
+    """
+
+    groups = data.get("groups")
+    pagination = data.get("pagination")
+    if groups != []:
+        return False
+
+    zero_signals = [
+        stats.get("textCount") == 0 if "textCount" in stats else False,
+        stats.get("documentCount") == 0 if "documentCount" in stats else False,
+    ]
+    if isinstance(pagination, dict):
+        zero_signals.extend(
+            [
+                pagination.get("totalPageCount") == 0
+                if "totalPageCount" in pagination
+                else False,
+                pagination.get("maxAvailablePage") == 0
+                if "maxAvailablePage" in pagination
+                else False,
+            ]
+        )
+    return any(zero_signals)
+
+
 def parse_concordance_response(data: dict[str, Any]) -> ConcordanceResult:
     """Parse totals, examples, hit forms, and metadata from an RNC response."""
 
@@ -274,8 +306,23 @@ def parse_concordance_response(data: dict[str, Any]) -> ConcordanceResult:
     stats = data.get("queryStats")
     if not isinstance(stats, dict):
         raise RNCError("The RNC response does not contain queryStats.")
-    if stats.get("wordUsageCount") is None:
-        raise RNCError("The RNC response does not contain wordUsageCount.")
+    count = stats.get("wordUsageCount")
+    if count is None:
+        if _is_confirmed_empty_result(data, stats):
+            count = 0
+        else:
+            raise RNCError(
+                "The RNC response does not contain wordUsageCount and does not "
+                "explicitly identify an empty result."
+            )
+    if isinstance(count, bool):
+        raise RNCError("The RNC wordUsageCount value is not numeric.")
+    try:
+        total_occurrences = int(count)
+    except (TypeError, ValueError) as error:
+        raise RNCError("The RNC wordUsageCount value is not numeric.") from error
+    if total_occurrences < 0:
+        raise RNCError("The RNC wordUsageCount value is negative.")
 
     examples: list[ConcordanceExample] = []
     forms: Counter[str] = Counter()
@@ -305,7 +352,7 @@ def parse_concordance_response(data: dict[str, Any]) -> ConcordanceResult:
 
     pagination = data.get("pagination") or {}
     return ConcordanceResult(
-        total_occurrences=int(stats["wordUsageCount"]),
+        total_occurrences=total_occurrences,
         matching_texts=int(stats.get("textCount") or 0),
         total_pages=int(pagination.get("totalPageCount") or 0),
         max_available_page=int(pagination.get("maxAvailablePage") or 0),
@@ -382,7 +429,7 @@ class RNCClient:
         self.session.headers.update({
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
-            "User-Agent": "Corpus-Querier-RNC/3.0.0",
+            "User-Agent": "Corpus-Querier-RNC/3.1.0",
         })
 
     def close(self) -> None:

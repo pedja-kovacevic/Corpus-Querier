@@ -1,12 +1,13 @@
-# Corpus Querier 3.0
+# Corpus Querier 3.1
 
 Corpus Querier is a cross-platform desktop application for reproducible batch
-corpus research. Version 3 adds the official Russian National Corpus public API
-while preserving the complete CLARIN.SI workflow from version 2.
+corpus research. Version 3.1 combines NoSketch Engine/CLARIN.SI, the official
+Sketch Engine API, and the Russian National Corpus public API in one interface.
 
 The opening screen asks the user to choose a provider:
 
-- **CLARIN.SI** — Sketch Engine/Bonito CQL searches;
+- **NoSketch Engine** — CLARIN.SI-hosted Bonito CQL searches;
+- **Sketch Engine** — authenticated official API searches, including the BNC;
 - **Russian National Corpus** — native RNC lexical–grammatical searches.
 
 ## Download and install
@@ -17,7 +18,7 @@ and download the package for your system:
 | Platform | Download |
 |---|---|
 | Windows | `Corpus-Querier-Setup.exe` |
-| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.0.2_amd64.deb` |
+| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.1.0_amd64.deb` |
 | Linux portable | `Corpus-Querier-x86_64.AppImage` |
 | macOS Apple Silicon | `Corpus-Querier-macOS-arm64.dmg` |
 | macOS Intel | `Corpus-Querier-macOS-x86_64.dmg` |
@@ -25,7 +26,7 @@ and download the package for your system:
 The installers contain the application and its Python dependencies. End users
 do not need Python, PowerShell, Visual Studio Code or a terminal.
 
-## What version 3 contains
+## What version 3.1 contains
 
 ### Shared capabilities
 
@@ -40,12 +41,14 @@ do not need Python, PowerShell, Visual Studio Code or a terminal.
   available;
 - Windows, Linux and macOS packaging.
 
-Version 3 also introduces a shared visual identity on every platform: a
-stylized data bird pecking a highlighted point from a corpus surface.
+Version 3.1 uses a shared visual identity on every platform: a stylized data
+bird pecking a highlighted point from a corpus surface. The larger in-app bird
+animates only while a query run is active, and the contact point lights briefly
+at each peck.
 
-### CLARIN.SI provider
+### NoSketch Engine provider
 
-- any available CLARIN.SI corpus name;
+- any available corpus name on the connected CLARIN.SI NoSketch Engine service;
 - standard CQL input;
 - exact total query frequency;
 - exact form lists and form frequencies returned by the Bonito frequency
@@ -60,6 +63,23 @@ Example:
 [lemma="čitati" & tag="Vmr3s"]
 ```
 
+### Sketch Engine provider
+
+- a masked personal API-key field and connection test;
+- access to corpora enabled for the user's Sketch Engine account;
+- the British National Corpus as the default test corpus;
+- standard CQL input and template generation;
+- exact total frequencies and available form-frequency output;
+- the same retry, progress, periodic-save and spreadsheet workflows as the
+  NoSketch Engine module.
+
+Example:
+
+```cql
+[lemma="travel"]
+[lemma="travel" & tag="V.*"]
+```
+
 ### Russian National Corpus provider
 
 - masked personal API-token input and connection testing;
@@ -69,6 +89,8 @@ Example:
 - creation date, author, author sex, category, sphere, topic, text type, genre
   and advanced metadata filters;
 - exact total occurrence counts from `queryStats.wordUsageCount`;
+- confirmed zero-result responses are written as numeric `0`, while malformed,
+  incomplete and HTTP-error responses remain `ERROR`;
 - sampled forms and concordance contexts in separate long-format worksheets.
 
 Example:
@@ -90,8 +112,10 @@ The interface deliberately distinguishes result scope:
 
 | Provider/result | Scope |
 |---|---|
-| CLARIN total frequency | Exact API total |
-| CLARIN form-frequency list | Complete frequency response |
+| NoSketch Engine total frequency | Exact API total |
+| NoSketch Engine form-frequency list | Complete frequency response |
+| Sketch Engine total frequency | Exact API total |
+| Sketch Engine form-frequency list | Complete frequency response when available |
 | RNC total frequency | Exact API total |
 | RNC forms and contexts | Returned concordance sample |
 
@@ -125,28 +149,35 @@ The release is checked with the following automated and manual tests:
    - CLARIN v2 regression tests pass;
    - spreadsheet cells accept totals and error markers;
    - all three packaging workflows complete.
-2. **CLARIN smoke test**
+2. **NoSketch Engine smoke test**
    - one existing-query workbook;
    - one generated-template run;
    - total-frequency mode;
    - total plus forms/frequencies mode;
    - capitalization grouping and a threshold greater than one;
    - two visibly completed attempts.
-3. **RNC smoke test**
+3. **Sketch Engine smoke test**
+   - API-key validation;
+   - one BNC exact-total query;
+   - one generated-template run;
+   - two visibly completed attempts.
+4. **RNC smoke test**
    - token validation;
    - one literal lemma query;
    - one regex query;
    - one grammatical query;
    - one metadata/date-filtered query;
    - exact-total mode and exact-total-plus-sampled-forms mode;
+   - one genuine zero-result query saved as `0`;
+   - one deliberately malformed response retained as `ERROR`;
    - two visibly completed attempts.
-4. **Spreadsheet verification**
+5. **Spreadsheet verification**
    - correct totals and query labels;
    - separate numeric cells for form frequencies;
    - RNC sample scope clearly recorded;
    - workbook opens without a repair warning;
    - stop-and-save preserves completed work.
-5. **Installer verification**
+6. **Installer verification**
    - Windows installer launches without Python installed;
    - Debian package or AppImage launches on Linux;
    - both macOS DMGs launch on their respective architectures, subject to the
@@ -161,10 +192,11 @@ is sufficient once the shared source build has passed automated tests.
 
 The GitHub Actions workflows can be run manually against a development branch.
 They upload installable artifacts without publishing a release. Versioned
-packages are attached automatically when a release tag such as `v3.0.2` is
+packages are attached automatically when a release tag such as `v3.1.0` is
 pushed.
 
 ## License and acknowledgment
 
-Corpus Querier is released under the MIT License. CLARIN.SI and the Russian
-National Corpus provide the corpus-querying infrastructure used by the app.
+Corpus Querier is released under the MIT License. CLARIN.SI, Sketch Engine and
+the Russian National Corpus provide the corpus-querying infrastructure used by
+the app.

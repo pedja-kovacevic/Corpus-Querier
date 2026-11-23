@@ -2,12 +2,6 @@ name: Publish release notes
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/publish-release-notes.yml"
-      - "RELEASE_NOTES_3.0.2.md"
 
 permissions:
   contents: write
@@ -23,6 +17,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release edit v3.0.2 \
-            --title "Corpus Querier 3.0.2" \
-            --notes-file RELEASE_NOTES_3.0.2.md
+          gh release edit v3.1.0 \
+            --title "Corpus Querier 3.1.0" \
+            --notes-file RELEASE_NOTES_3.1.0.md
