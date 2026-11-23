@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import numbers
 import os
 import queue
 import re
@@ -37,6 +38,12 @@ COMMON_CORPORA = [
     "OLD_RUS", "MID_RUS", "BIRCHBARK", "ORTHLIB", "EPIGRAPHICA",
 ]
 PLACEHOLDER_RE = re.compile(r"\{(?:WORD|LEMMA)\}|\b(?:WORD|LEMMA)\b")
+_QUERY_TEXT_TRANSLATION = str.maketrans({
+    "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"',
+    "\u00ab": '"', "\u00bb": '"',
+    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'",
+    "\u00a0": " ", "\u202f": " ", "\u200b": "", "\ufeff": "",
+})
 TRANSPORT_RETRY_DELAYS = (2, 5, 10, 20, 30, 60, 120, 300)
 RETRYABLE_HTTP_STATUS = {408, 425, 429, 500, 502, 503, 504}
 
@@ -75,10 +82,27 @@ def index_to_column_letter(index: int) -> str:
 
 
 def escape_template_value(value: object) -> str:
-    return str(value).strip().replace("\\", "\\\\").replace('"', '\\"')
+    return normalize_query_text(value).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def normalize_query_text(value: object) -> str:
+    """Normalize typography introduced by word processors and spreadsheets.
+
+    CQL/RNC syntax requires plain quotation marks.  Excel itself preserves
+    them correctly, but pasted text may contain curly/guillemet quotes or a
+    CSV-style outer quote with doubled internal quotes.
+    """
+
+    result = str(value).strip().translate(_QUERY_TEXT_TRANSLATION)
+    if len(result) >= 2 and result.startswith('"') and result.endswith('"'):
+        inner = result[1:-1]
+        if '""' in inner:
+            result = inner.replace('""', '"').strip()
+    return result
 
 
 def generate_query(template: str, value: object) -> str:
+    template = normalize_query_text(template)
     escaped = escape_template_value(value)
     result = template.replace("{WORD}", escaped).replace("{LEMMA}", escaped)
     result = re.sub(r"\bWORD\b", lambda _: escaped, result)
@@ -327,6 +351,9 @@ class QueryWorker(threading.Thread):
             if cfg.start_row > len(dataframe):
                 raise ValueError("The starting row is outside the spreadsheet.")
             tasks = []
+            completed_cells = 0
+            normalized_cells = 0
+            recovered_error_cells = 0
             for row in range(cfg.start_row - 1, end_row):
                 for column in cfg.columns:
                     if column >= len(dataframe.columns):
@@ -334,9 +361,54 @@ class QueryWorker(threading.Thread):
                     value = dataframe.iat[row, column]
                     if pd.isna(value) or not str(value).strip():
                         continue
-                    expression = str(value).strip()
+                    # A resumed output workbook can contain completed numeric
+                    # results before the remaining CQL cells.  Those numbers
+                    # are results, not queries, and must be left untouched.
+                    if isinstance(value, numbers.Number) and not isinstance(value, bool):
+                        completed_cells += 1
+                        continue
+                    raw_expression = str(value).strip()
+                    if raw_expression.upper() == "ERROR":
+                        # Generated workbooks retain their template in row 1
+                        # and source item in column A.  That makes an earlier
+                        # ERROR recoverable instead of permanently losing its
+                        # query text.
+                        header = (
+                            normalize_query_text(dataframe.iat[0, column])
+                            if row > 0 else ""
+                        )
+                        source_value = dataframe.iat[row, 0] if column > 0 else None
+                        if (
+                            header and PLACEHOLDER_RE.search(header)
+                            and source_value is not None and not pd.isna(source_value)
+                            and str(source_value).strip()
+                        ):
+                            expression = generate_query(header, source_value)
+                            recovered_error_cells += 1
+                        else:
+                            completed_cells += 1
+                            continue
+                    else:
+                        expression = normalize_query_text(raw_expression)
+                        if expression != raw_expression:
+                            normalized_cells += 1
                     compact_query_to_payload(expression, cfg.corpus, cfg.subcorpus)
                     tasks.append((row, column, expression))
+            if completed_cells:
+                self.log(
+                    f"Resume mode: left {completed_cells:,} existing completed "
+                    "or unrecoverable cells unchanged."
+                )
+            if normalized_cells:
+                self.log(
+                    f"Normalized quotation marks or invisible spacing in "
+                    f"{normalized_cells:,} query cells."
+                )
+            if recovered_error_cells:
+                self.log(
+                    f"Reconstructed and queued {recovered_error_cells:,} previous "
+                    "ERROR cells from the workbook's templates and input column."
+                )
             return dataframe, tasks
 
         if cfg.word_source == "spreadsheet":
@@ -345,9 +417,9 @@ class QueryWorker(threading.Thread):
                 raise ValueError("The selected word column is outside the spreadsheet.")
             end_row = min(cfg.end_row or len(source), len(source))
             values = source.iloc[cfg.start_row - 1:end_row, cfg.word_column].tolist()
-            words = [str(value).strip() for value in values if not pd.isna(value) and str(value).strip()]
+            words = [normalize_query_text(value) for value in values if not pd.isna(value) and str(value).strip()]
         else:
-            words = [item.strip() for item in re.split(r"[,;\n]+", cfg.words_text) if item.strip()]
+            words = [normalize_query_text(item) for item in re.split(r"[,;\n]+", cfg.words_text) if item.strip()]
 
         if not words:
             raise ValueError("No words or lemmas were supplied.")
@@ -981,7 +1053,7 @@ class CorpusQuerierRNCApp(ctk.CTk):
             input_file = Path(input_text) if self.word_source.get() == "spreadsheet" else None
             if self.word_source.get() == "spreadsheet" and (not input_text or not input_file.exists()):
                 raise ValueError("Choose a valid Excel file containing the words.")
-            templates = [line.strip() for line in self.templates_box.get("1.0", "end").splitlines() if line.strip()]
+            templates = [normalize_query_text(line) for line in self.templates_box.get("1.0", "end").splitlines() if line.strip()]
             bad = [template for template in templates if not PLACEHOLDER_RE.search(template)]
             if bad:
                 raise ValueError("Every template must contain {WORD} or {LEMMA}.")

@@ -270,32 +270,19 @@ def _is_confirmed_empty_result(data: dict[str, Any], stats: dict[str, Any]) -> b
     """Recognize a successful empty concordance without masking malformed data.
 
     The RNC may omit ``wordUsageCount`` for a genuine no-match response. We
-    accept that omission as zero only when the response also supplies both an
-    empty concordance and an explicit zero-valued result signal. A merely
-    missing field is still an error.
+    accept that omission as zero when a successful concordance response has an
+    explicitly empty ``groups`` list.  This is the stable empty-result marker
+    used by the API even though its pagination/statistics fields are not
+    consistent across zero-hit queries.  Transport errors and HTTP failures are
+    handled before this parser; a merely missing field without ``groups: []``
+    remains an error.
     """
 
-    groups = data.get("groups")
-    pagination = data.get("pagination")
-    if groups != []:
+    if data.get("groups") != []:
         return False
-
-    zero_signals = [
-        stats.get("textCount") == 0 if "textCount" in stats else False,
-        stats.get("documentCount") == 0 if "documentCount" in stats else False,
-    ]
-    if isinstance(pagination, dict):
-        zero_signals.extend(
-            [
-                pagination.get("totalPageCount") == 0
-                if "totalPageCount" in pagination
-                else False,
-                pagination.get("maxAvailablePage") == 0
-                if "maxAvailablePage" in pagination
-                else False,
-            ]
-        )
-    return any(zero_signals)
+    if any(data.get(key) for key in ("error", "errors", "exception")):
+        return False
+    return isinstance(stats, dict)
 
 
 def parse_concordance_response(data: dict[str, Any]) -> ConcordanceResult:
@@ -429,7 +416,7 @@ class RNCClient:
         self.session.headers.update({
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
-            "User-Agent": "Corpus-Querier-RNC/3.1.1",
+            "User-Agent": "Corpus-Querier-RNC/3.1.2",
         })
 
     def close(self) -> None:

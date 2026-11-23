@@ -11,7 +11,7 @@ from PIL import Image, ImageChops, ImageDraw
 
 
 APP_NAME = "Corpus Querier"
-APP_VERSION = "3.1.1"
+APP_VERSION = "3.1.2"
 
 
 def resource_path(relative_path: str) -> Path:
@@ -122,12 +122,15 @@ class PeckingBird(ctk.CTkLabel):
     WIDTH = 210
     HEIGHT = 205
     _FRAME_DELAY_MS = 95
-    _ANGLES = (0.0, 0.0, -1.0, -2.5, -4.0, -6.0, -6.0, -4.0, -2.0, 0.0, 0.0)
+    _ANGLES = (
+        3.0, 3.0, 2.0, 0.5, -1.5, -4.0, -6.5, -8.0,
+        -8.0, -5.5, -3.0, -0.5, 1.5, 3.0,
+    )
 
     def __init__(self, master) -> None:
         self._frames: list[ctk.CTkImage] = []
         for angle in self._ANGLES:
-            contact = angle <= -5.5
+            contact = angle <= -7.5
             self._frames.append(
                 ctk.CTkImage(
                     light_image=_render_pecking_frame(angle, contact, _SIDEBAR_LIGHT),
