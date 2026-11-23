@@ -5,7 +5,7 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from app_identity import APP_VERSION, apply_window_icon, load_brand_image
-from corpus_querier_clarin import CorpusQuerierApp
+from corpus_querier_noske import CorpusQuerierNoSketchApp
 from corpus_querier_rnc import CorpusQuerierRNCApp
 from corpus_querier_sketchengine import CorpusQuerierSketchEngineApp
 
@@ -50,14 +50,14 @@ class ProviderChooser(ctk.CTk):
             cards,
             column=0,
             title="NoSketch Engine",
-            subtitle="CLARIN.SI-hosted Bonito corpora",
+            subtitle="Public Bonito corpus service",
             description=(
                 "Run CQL queries, obtain exact total frequencies, and extract "
-                "complete form-frequency lists from supported CLARIN.SI corpora."
+                "complete form-frequency lists from compatible NoSketch Engine corpora."
             ),
             details="CQL · exact totals · exact form lists",
-            button_text="Open CLARIN querier",
-            provider="clarin",
+            button_text="Open NoSketch Engine",
+            provider="noske",
         )
         self._provider_card(
             cards,
@@ -143,8 +143,8 @@ class ProviderChooser(ctk.CTk):
 def main() -> None:
     chooser = ProviderChooser()
     chooser.mainloop()
-    if chooser.provider == "clarin":
-        CorpusQuerierApp().mainloop()
+    if chooser.provider == "noske":
+        CorpusQuerierNoSketchApp().mainloop()
     elif chooser.provider == "sketchengine":
         CorpusQuerierSketchEngineApp().mainloop()
     elif chooser.provider == "rnc":

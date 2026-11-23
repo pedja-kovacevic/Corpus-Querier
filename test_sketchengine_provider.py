@@ -3,7 +3,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from corpus_querier_clarin import JobConfig, QueryWorker
+from corpus_querier_noske import JobConfig, QueryWorker
 from corpus_querier_sketchengine import (
     CorpusQuerierSketchEngineApp,
     SKETCH_ENGINE_ROOT,
