@@ -11,6 +11,7 @@ hiddenimports = collect_submodules("customtkinter")
 hiddenimports += ["PIL._tkinter_finder"]
 datas = collect_data_files("customtkinter")
 datas += [("assets/corpus-querier.png", "assets")]
+datas += [("assets/linux-icons/64x64/corpus-querier-data-bird.png", "assets")]
 
 icon_file = str(
     Path("assets")
@@ -60,8 +61,8 @@ if sys.platform == "darwin":
         icon="assets/corpus-querier.png",
         info_plist={
             "CFBundleDisplayName": "Corpus Querier",
-            "CFBundleShortVersionString": "3.1.2",
-            "CFBundleVersion": "3.1.2",
+            "CFBundleShortVersionString": "3.1.3",
+            "CFBundleVersion": "3.1.3",
             "NSHighResolutionCapable": True,
         },
     )

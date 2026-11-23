@@ -10,4 +10,8 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
         /usr/share/icons/hicolor || true
 fi
 
+if command -v xdg-icon-resource >/dev/null 2>&1; then
+    xdg-icon-resource forceupdate --theme hicolor || true
+fi
+
 exit 0

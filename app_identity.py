@@ -11,7 +11,7 @@ from PIL import Image, ImageChops, ImageDraw
 
 
 APP_NAME = "Corpus Querier"
-APP_VERSION = "3.1.2"
+APP_VERSION = "3.1.3"
 
 
 def resource_path(relative_path: str) -> Path:
@@ -24,13 +24,23 @@ def resource_path(relative_path: str) -> Path:
 def apply_window_icon(window: tk.Misc) -> None:
     """Apply the shared icon to a Tk/CustomTkinter top-level window."""
 
-    try:
-        icon = tk.PhotoImage(file=str(resource_path("assets/corpus-querier.png")))
-        window.iconphoto(True, icon)
-        window._corpus_querier_icon = icon  # Keep the Tk image alive.
-    except (OSError, tk.TclError):
-        # The executable and installer still carry their native embedded icon.
-        pass
+    candidates = (
+        "assets/corpus-querier-data-bird.png",
+        "assets/corpus-querier.png",
+    )
+    for relative_path in candidates:
+        try:
+            icon = tk.PhotoImage(file=str(resource_path(relative_path)))
+            window.iconphoto(True, icon)
+            # Reapply after the X11 window is mapped. Some Linux panels read
+            # _NET_WM_ICON only after realization and otherwise keep the
+            # generic Tk/PyInstaller icon.
+            window.after_idle(lambda saved=icon: window.iconphoto(True, saved))
+            window._corpus_querier_icon = icon  # Keep the Tk image alive.
+            return
+        except (OSError, tk.TclError):
+            continue
+    # The executable and installer still carry their native embedded icon.
 
 
 def load_brand_image(size: tuple[int, int]) -> ctk.CTkImage:
