@@ -11,7 +11,7 @@ from app_identity import (
 
 class AppIdentityTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION, "3.1.1")
+        self.assertEqual(APP_VERSION, "3.1.2")
 
     def test_bird_layer_is_nonempty_rgba(self):
         image = _load_bird_layer()
@@ -21,13 +21,14 @@ class AppIdentityTests(unittest.TestCase):
 
     def test_animation_tilts_instead_of_moving_vertically(self):
         angles = PeckingBird._ANGLES
-        self.assertEqual(angles[0], 0.0)
+        self.assertGreater(angles[0], 0.0)
         self.assertLess(min(angles), 0.0)
+        self.assertGreater(max(angles) - min(angles), 10.0)
         self.assertGreaterEqual(angles.count(min(angles)), 2)
 
     def test_rendered_frames_are_seamless_with_sidebar(self):
         rest = _render_pecking_frame(0.0, False, _SIDEBAR_DARK)
-        contact = _render_pecking_frame(-6.0, True, _SIDEBAR_DARK)
+        contact = _render_pecking_frame(-8.0, True, _SIDEBAR_DARK)
         self.assertEqual(rest.getpixel((0, 0)), _SIDEBAR_DARK)
         self.assertEqual(contact.getpixel((209, 204)), _SIDEBAR_DARK)
         self.assertNotEqual(rest.tobytes(), contact.tobytes())

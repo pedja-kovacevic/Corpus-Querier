@@ -2,6 +2,8 @@ import json
 import unittest
 from pathlib import Path
 
+from corpus_querier_rnc import generate_query, normalize_query_text
+
 from rnc_provider import (
     RNCError,
     SubcorpusFilters,
@@ -70,11 +72,30 @@ class ProviderTests(unittest.TestCase):
         })
         self.assertEqual(result.total_occurrences, 0)
 
-    def test_missing_count_without_empty_evidence_is_an_error(self):
+    def test_realistic_empty_response_without_zero_pagination_is_zero(self):
+        result = parse_concordance_response({
+            "corpusStats": {"wordUsageCount": 426191860},
+            "subcorpStats": {},
+            "queryStats": {},
+            "groups": [],
+            "sorting": {"currentSorting": "RELEVANCE"},
+            "pagination": {"totalPageCount": 1, "maxAvailablePage": 1},
+        })
+        self.assertEqual(result.total_occurrences, 0)
+
+    def test_explicit_error_payload_is_not_misclassified_as_zero(self):
         with self.assertRaises(RNCError):
             parse_concordance_response({
                 "queryStats": {},
                 "groups": [],
+                "pagination": {},
+                "error": {"message": "backend failure"},
+            })
+
+    def test_missing_groups_without_count_is_an_error(self):
+        with self.assertRaises(RNCError):
+            parse_concordance_response({
+                "queryStats": {},
                 "pagination": {},
             })
 
@@ -85,6 +106,19 @@ class ProviderTests(unittest.TestCase):
                 "groups": [{"docs": []}],
                 "pagination": {"totalPageCount": 0},
             })
+
+    def test_query_typography_is_normalized(self):
+        self.assertEqual(
+            normalize_query_text('[lemma=“папа”\u00a0& gramm=„(S)”]'),
+            '[lemma="папа" & gramm="(S)"]',
+        )
+        self.assertEqual(
+            normalize_query_text('"[lemma=""папа""]"'),
+            '[lemma="папа"]',
+        )
+
+    def test_generated_query_normalizes_template_and_input(self):
+        self.assertEqual(generate_query('[lemma=“{LEMMA}”]', 'папа'), '[lemma="папа"]')
 
     def test_saved_real_response(self):
         fixture = Path(__file__).with_name("upload") / "rnc-response-pretty.json"
