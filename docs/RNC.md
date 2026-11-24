@@ -124,7 +124,9 @@ python -m unittest -v
 
 ## Reliability behavior
 
-- at least two request attempts per query;
+- one or more configurable request attempts per query (default: two);
+- manual Pause / Resume between requests; the cross-provider automatic
+  10-error cooldown is intentionally not applied to RNC;
 - the highest valid exact total is retained;
 - configurable delay and timeout;
 - periodic Excel saving;

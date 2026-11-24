@@ -53,7 +53,7 @@ class FakeSession:
         return None
 
 
-def make_worker(results):
+def make_worker(results, attempts=2):
     config = JobConfig(
         mode="existing",
         token="test-token",
@@ -69,7 +69,7 @@ def make_worker(results):
         templates=[],
         delay=0,
         timeout=1,
-        attempts=2,
+        attempts=attempts,
         save_every=1,
         subcorpus=None,
         output_mode="Exact total frequency",
@@ -99,6 +99,16 @@ class RNCTransportRetryTests(unittest.TestCase):
         self.assertEqual(successful, 2)
         self.assertEqual(worker.session.calls, 3)
         self.assertEqual(stop_event.waits, [2.0, 1])
+
+    def test_one_attempt_per_query_is_supported(self):
+        worker, stop_event = make_worker([FakeResponse(5)], attempts=1)
+
+        result, successful, _ = worker.fetch_result(self.query)
+
+        self.assertEqual(result.total_occurrences, 5)
+        self.assertEqual(successful, 1)
+        self.assertEqual(worker.session.calls, 1)
+        self.assertEqual(stop_event.waits, [])
 
     def test_persistent_resets_pause_without_writing_a_false_error(self):
         worker, stop_event = make_worker([

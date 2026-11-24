@@ -16,6 +16,12 @@ import pandas as pd
 import requests
 
 from app_identity import APP_VERSION, PeckingBird, apply_window_icon
+from run_control import (
+    AUTOMATIC_PAUSE_SECONDS,
+    CONSECUTIVE_FAILURE_LIMIT,
+    ConsecutiveFailureGuard,
+    RunControl,
+)
 
 APP_NAME = "Corpus Querier — NoSketch Engine"
 VIEW_URL = "https://www.clarin.si/ske/bonito/run.cgi/view"
@@ -129,11 +135,24 @@ class QueryError(RuntimeError):
 
 
 class QueryWorker(threading.Thread):
-    def __init__(self, config: JobConfig, events: queue.Queue, stop_event: threading.Event):
+    def __init__(
+        self,
+        config: JobConfig,
+        events: queue.Queue,
+        stop_event: threading.Event,
+        run_event: threading.Event | None = None,
+    ):
         super().__init__(daemon=True)
         self.config = config
         self.events = events
         self.stop_event = stop_event
+        self.run_event = run_event or threading.Event()
+        self.run_event.set()
+        self.control = RunControl(
+            self.stop_event,
+            self.run_event,
+            on_paused=lambda: self.emit("paused"),
+        )
         self.session = requests.Session()
         self.session.headers.update({
             "Accept": "application/json",
@@ -147,6 +166,35 @@ class QueryWorker(threading.Thread):
         self.query_records: list[dict] = []
         self.form_records: list[dict] = []
         self.run_started_at = datetime.now().astimezone()
+
+    def _require_running(self) -> None:
+        if not self.control.wait_until_running():
+            raise InterruptedError
+
+    def _wait(self, seconds: float) -> None:
+        if not self.control.wait(seconds):
+            raise InterruptedError
+
+    def _automatic_pause(self) -> bool:
+        self.log(
+            f"{CONSECUTIVE_FAILURE_LIMIT} consecutive queries failed. "
+            "Starting a 24-hour safety pause. Use Resume to continue sooner, "
+            "or Stop & save to end the run."
+        )
+        self.emit(
+            "auto_paused",
+            seconds=AUTOMATIC_PAUSE_SECONDS,
+            resume_at=time.time() + AUTOMATIC_PAUSE_SECONDS,
+        )
+        reason = self.control.automatic_pause(AUTOMATIC_PAUSE_SECONDS)
+        if reason == "stopped":
+            return False
+        self.emit("auto_resumed", reason=reason)
+        if reason == "elapsed":
+            self.log("The 24-hour safety pause ended automatically. Resuming queries.")
+        else:
+            self.log("The automatic safety pause was interrupted. Resuming queries.")
+        return True
 
     def emit(self, kind: str, **payload) -> None:
         self.events.put((kind, payload))
@@ -256,8 +304,7 @@ class QueryWorker(threading.Thread):
         started = time.monotonic()
 
         for attempt in range(1, self.config.attempts + 1):
-            if self.stop_event.is_set():
-                raise InterruptedError
+            self._require_running()
             self.log(f"Attempt {attempt}/{self.config.attempts}")
             self.log(f"Querying: {full_url}")
             try:
@@ -319,8 +366,8 @@ class QueryWorker(threading.Thread):
                 last_error = error
                 self.log(f"Error: {error}")
 
-            if attempt < self.config.attempts and self.stop_event.wait(1):
-                raise InterruptedError
+            if attempt < self.config.attempts:
+                self._wait(1)
 
         if not successful_attempts:
             raise QueryError(str(last_error or "All query attempts failed."))
@@ -468,6 +515,7 @@ class QueryWorker(threading.Thread):
     def run(self) -> None:
         started = time.monotonic()
         completed = failed = 0
+        failure_guard = ConsecutiveFailureGuard()
         dataframe: pd.DataFrame | None = None
         try:
             dataframe, tasks = self.load_job()
@@ -478,13 +526,14 @@ class QueryWorker(threading.Thread):
             self.log(f"Prepared {total:,} queries for corpus '{self.config.corpus}'.")
 
             for position, task in enumerate(tasks, start=1):
-                if self.stop_event.is_set():
+                if not self.control.wait_until_running():
                     break
                 row, column, cql = task.row, task.column, task.cql
                 cell = f"{index_to_column_letter(column)}{row + 1}"
                 query_id = f"Q{position:06d}"
                 self.emit("current", position=position, cell=cell, cql=cql)
                 self.log(f"\n[{position:,}/{total:,}] Cell {cell}\nRunning query: {cql}")
+                pause_due = False
                 try:
                     result = self.fetch_result(cql)
                     if self.config.output_mode == "total":
@@ -523,6 +572,7 @@ class QueryWorker(threading.Thread):
                                 }
                             )
                     completed += 1
+                    failure_guard.record_success()
                     self.emit(
                         "result",
                         success=True,
@@ -531,6 +581,8 @@ class QueryWorker(threading.Thread):
                         attempts=result.successful_attempts,
                         duration=result.duration,
                     )
+                except InterruptedError:
+                    break
                 except QueryError as error:
                     if self.config.output_mode == "total":
                         dataframe.iat[row, column] = "ERROR"
@@ -551,6 +603,7 @@ class QueryWorker(threading.Thread):
                             }
                         )
                     failed += 1
+                    pause_due = failure_guard.record_failure()
                     self.log(f"Query failed: {error}")
                     self.emit("result", success=False, error=str(error))
 
@@ -561,8 +614,15 @@ class QueryWorker(threading.Thread):
                           total=total, elapsed=elapsed, eta=eta)
                 if processed % self.config.save_every == 0:
                     self.save(dataframe)
-                if position < total and self.stop_event.wait(self.config.delay):
-                    break
+                if pause_due:
+                    self.save(dataframe)
+                    if not self._automatic_pause():
+                        break
+                if position < total:
+                    try:
+                        self._wait(self.config.delay)
+                    except InterruptedError:
+                        break
 
             self.save(dataframe)
             stopped = self.stop_event.is_set()
@@ -607,6 +667,9 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         self.minsize(1060, 720)
         self.events: queue.Queue = queue.Queue()
         self.stop_event = threading.Event()
+        self.run_event = threading.Event()
+        self.run_event.set()
+        self.auto_pause_until = 0.0
         self.worker: QueryWorker | None = None
         self.total = 0
         self.output_mode = ctk.StringVar(value="Total frequency")
@@ -662,6 +725,16 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         self.stop_button = ctk.CTkButton(header, text="Stop & save", fg_color="#B91C1C", hover_color="#991B1B",
                                          state="disabled", command=self._stop)
         self.stop_button.pack(side="right", padx=(10, 0))
+        self.pause_button = ctk.CTkButton(
+            header,
+            text="⏸  Pause",
+            width=110,
+            fg_color="#B45309",
+            hover_color="#92400E",
+            state="disabled",
+            command=self._toggle_pause,
+        )
+        self.pause_button.pack(side="right", padx=(10, 0))
         self.start_button = ctk.CTkButton(header, text="▶  Start queries", width=160, command=self._start)
         self.start_button.pack(side="right")
         self.output_menu = ctk.CTkOptionMenu(
@@ -885,7 +958,7 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
             "case_sensitive": ctk.BooleanVar(value=True)}
         setattr(self, f"{prefix}_advanced", variables)
         for i, (label, key) in enumerate([("Delay (s)", "delay"), ("Timeout (s)", "timeout"),
-                                           ("Attempts", "attempts"), ("Save every", "save")]):
+                                           ("Attempts/query", "attempts"), ("Save every", "save")]):
             ctk.CTkLabel(frame, text=label, text_color=("#526070", "#94A3B8")).grid(row=0, column=i*2, padx=(0 if i == 0 else 14, 6))
             ctk.CTkEntry(frame, textvariable=variables[key], width=65).grid(row=0, column=i*2+1)
         ctk.CTkLabel(
@@ -966,10 +1039,6 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         save_interval = self._number(
             advanced["save"].get(), "Save interval", True
         )
-        if attempts < 2:
-            raise ValueError(
-                "Attempts must be at least 2; both verification queries are mandatory."
-            )
         provider_settings = (
             self.provider_name,
             api_key,
@@ -1010,13 +1079,57 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         except Exception as error:
             messagebox.showerror(self.app_name, str(error)); return
         self.stop_event.clear()
+        self.run_event.set()
+        self.auto_pause_until = 0.0
         self._reset_monitor()
         self._set_running(True)
-        self.worker = QueryWorker(config, self.events, self.stop_event)
+        self.worker = QueryWorker(
+            config,
+            self.events,
+            self.stop_event,
+            self.run_event,
+        )
         self.worker.start()
+
+    def _toggle_pause(self) -> None:
+        if not self.worker or not self.worker.is_alive():
+            return
+        if self.run_event.is_set():
+            self.run_event.clear()
+            self.pecking_bird.set_running(False)
+            self.pause_button.configure(text="▶  Resume")
+            self.status_pill.configure(
+                text="●  PAUSING",
+                fg_color=("#FEF3C7", "#4A3510"),
+                text_color=("#92400E", "#FCD34D"),
+            )
+            self._append_log(
+                "\nPause requested. The active request will finish; no new "
+                "request will start until Resume is selected.\n"
+            )
+        else:
+            automatic = self.auto_pause_until > 0
+            self.auto_pause_until = 0.0
+            self.run_event.set()
+            self.pecking_bird.set_running(True)
+            self.pause_button.configure(text="⏸  Pause")
+            self.status_pill.configure(
+                text="●  RUNNING",
+                fg_color=("#DBEAFE", "#17345C"),
+                text_color=("#1D4ED8", "#93C5FD"),
+            )
+            message = (
+                "Automatic safety pause interrupted by the user."
+                if automatic
+                else "Run resumed."
+            )
+            self._append_log(f"\n{message}\n")
 
     def _stop(self) -> None:
         self.stop_event.set()
+        self.run_event.set()
+        self.auto_pause_until = 0.0
+        self.pause_button.configure(state="disabled")
         self.status_pill.configure(text="●  STOPPING", fg_color=("#FEF3C7", "#4A3510"), text_color=("#92400E", "#FCD34D"))
         self._append_log("\nStop requested. The current request will finish, then results will be saved.\n")
 
@@ -1024,6 +1137,10 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         self.pecking_bird.set_running(running)
         self.start_button.configure(state="disabled" if running else "normal")
         self.stop_button.configure(state="normal" if running else "disabled")
+        self.pause_button.configure(
+            state="normal" if running else "disabled",
+            text="⏸  Pause",
+        )
         self.output_menu.configure(state="disabled" if running else "normal")
         self.tabs.configure(state="disabled" if running else "normal")
         if self.requires_api_key:
@@ -1033,6 +1150,18 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
             )
         if running:
             self.status_pill.configure(text="●  RUNNING", fg_color=("#DBEAFE", "#17345C"), text_color=("#1D4ED8", "#93C5FD"))
+        else:
+            self.run_event.set()
+            self.auto_pause_until = 0.0
+
+    def _update_auto_pause_status(self) -> None:
+        if self.auto_pause_until <= 0 or self.run_event.is_set():
+            return
+        remaining = max(0.0, self.auto_pause_until - time.time())
+        if remaining <= 0:
+            return
+        self.status_pill.configure(text=f"●  AUTO-PAUSED · {format_duration(remaining)}")
+        self.after(1000, self._update_auto_pause_status)
 
     def _reset_monitor(self) -> None:
         self.progress.set(0); self.percent_label.configure(text="0%")
@@ -1053,6 +1182,37 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
                     self.total = payload["total"]; self.summary_labels["total"].configure(text=f"{self.total:,}")
                 elif kind == "current":
                     self.current_label.configure(text=f'{payload["position"]:,}/{self.total:,} · {payload["cell"]} · {payload["cql"]}')
+                elif kind == "paused":
+                    if self.auto_pause_until <= 0:
+                        self.status_pill.configure(
+                            text="●  PAUSED",
+                            fg_color=("#FEF3C7", "#4A3510"),
+                            text_color=("#92400E", "#FCD34D"),
+                        )
+                        self.current_label.configure(
+                            text="Paused safely before the next network request."
+                        )
+                elif kind == "auto_paused":
+                    self.auto_pause_until = payload["resume_at"]
+                    self.pecking_bird.set_running(False)
+                    self.pause_button.configure(text="▶  Resume")
+                    self.current_label.configure(
+                        text=(
+                            f"Safety pause after {CONSECUTIVE_FAILURE_LIMIT} "
+                            "consecutive failed queries."
+                        )
+                    )
+                    self._update_auto_pause_status()
+                elif kind == "auto_resumed":
+                    self.auto_pause_until = 0.0
+                    if self.run_event.is_set():
+                        self.pecking_bird.set_running(True)
+                        self.pause_button.configure(text="⏸  Pause")
+                        self.status_pill.configure(
+                            text="●  RUNNING",
+                            fg_color=("#DBEAFE", "#17345C"),
+                            text_color=("#1D4ED8", "#93C5FD"),
+                        )
                 elif kind == "progress":
                     ratio = payload["processed"] / payload["total"]
                     self.progress.set(ratio); self.percent_label.configure(text=f"{ratio:.0%}")
@@ -1079,6 +1239,7 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         if self.worker and self.worker.is_alive():
             if not messagebox.askyesno(self.app_name, "A run is active. Stop, save, and close when possible?"): return
             self.stop_event.set()
+            self.run_event.set()
         self.api_key.set("")
         self.destroy()
 

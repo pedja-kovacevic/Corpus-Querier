@@ -1,7 +1,7 @@
-# Corpus Querier 3.1
+# Corpus Querier 3.2
 
 Corpus Querier is an independent, cross-platform desktop application for
-reproducible batch corpus research. Version 3.1 combines NoSketch Engine,
+reproducible batch corpus research. Version 3.2 combines NoSketch Engine,
 the official Sketch Engine API, and the Russian National Corpus public API in
 one interface.
 
@@ -19,7 +19,7 @@ and download the package for your system:
 | Platform | Download |
 |---|---|
 | Windows | `Corpus-Querier-Setup.exe` |
-| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.1.4_amd64.deb` |
+| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.2.0_amd64.deb` |
 | Linux portable | `Corpus-Querier-x86_64.AppImage` |
 | macOS Apple Silicon | `Corpus-Querier-macOS-arm64.dmg` |
 | macOS Intel | `Corpus-Querier-macOS-x86_64.dmg` |
@@ -27,22 +27,26 @@ and download the package for your system:
 The installers contain the application and its Python dependencies. End users
 do not need Python, PowerShell, Visual Studio Code or a terminal.
 
-## What version 3.1 contains
+## What version 3.2 contains
 
 ### Shared capabilities
 
 - existing-query Excel spreadsheets;
 - automatic query generation from typed items or an Excel column;
 - reusable `{LEMMA}` and `{WORD}` templates;
-- at least two complete attempts for every query;
+- configurable attempts per query: choose `1` for speed or `2` and above for
+  repeated verification;
 - configurable request delay and timeout;
 - progress, elapsed time and ETA;
-- periodic saving and **Stop & save**;
+- **Pause / Resume** between network requests, without losing the current run;
+- periodic saving and **Stop & save**, including while paused;
+- a 24-hour safety pause after 10 consecutive failed NoSketch Engine or Sketch
+  Engine queries; the user may resume earlier or stop and save;
 - capitalization grouping and minimum-frequency thresholds where forms are
   available;
 - Windows, Linux and macOS packaging.
 
-Version 3.1 uses a shared visual identity on every platform: a stylized data
+Version 3.2 uses a shared visual identity on every platform: a stylized data
 bird pecking a highlighted point from a corpus surface. The larger in-app bird
 animates only while a query run is active, and the contact point lights briefly
 at each peck.
@@ -92,6 +96,9 @@ Example:
 - exact total occurrence counts from `queryStats.wordUsageCount`;
 - confirmed zero-result responses are written as numeric `0`, while malformed,
   incomplete and HTTP-error responses remain `ERROR`;
+- manual Pause / Resume is available, but the 10-error automatic cooldown is
+  deliberately disabled for RNC while zero-result handling remains under
+  provider-specific validation;
 - sampled forms and concordance contexts in separate long-format worksheets.
 
 Example:
@@ -156,12 +163,14 @@ The release is checked with the following automated and manual tests:
    - total-frequency mode;
    - total plus forms/frequencies mode;
    - capitalization grouping and a threshold greater than one;
-   - two visibly completed attempts.
+   - both one-attempt and two-attempt runs;
+   - pause, resume and stop-while-paused behaviour.
 3. **Sketch Engine smoke test**
    - API-key validation;
    - one BNC exact-total query;
    - one generated-template run;
-   - two visibly completed attempts.
+   - both one-attempt and two-attempt runs;
+   - automatic safety pause after 10 simulated consecutive failures.
 4. **RNC smoke test**
    - token validation;
    - one literal lemma query;
@@ -171,7 +180,8 @@ The release is checked with the following automated and manual tests:
    - exact-total mode and exact-total-plus-sampled-forms mode;
    - one genuine zero-result query saved as `0`;
    - one deliberately malformed response retained as `ERROR`;
-   - two visibly completed attempts.
+   - both one-attempt and two-attempt runs;
+   - manual pause and resume, without the automatic 10-error cooldown.
 5. **Spreadsheet verification**
    - correct totals and query labels;
    - separate numeric cells for form frequencies;
@@ -193,7 +203,7 @@ is sufficient once the shared source build has passed automated tests.
 
 The GitHub Actions workflows can be run manually against a development branch.
 They upload installable artifacts without publishing a release. Versioned
-packages are attached automatically when a release tag such as `v3.1.4` is
+packages are attached automatically when a release tag such as `v3.2.0` is
 pushed.
 
 ## Service independence and acknowledgment

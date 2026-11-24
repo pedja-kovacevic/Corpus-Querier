@@ -34,7 +34,7 @@ class FakeSession:
         return FakeResponse(self.payload)
 
 
-def sketch_config(output_mode="total"):
+def sketch_config(output_mode="total", attempts=2):
     return JobConfig(
         mode="generated",
         input_file=None,
@@ -49,7 +49,7 @@ def sketch_config(output_mode="total"):
         templates=['[lemma="{LEMMA}"]'],
         delay=1,
         timeout=30,
-        attempts=2,
+        attempts=attempts,
         save_every=25,
         min_form_frequency=1,
         case_sensitive=True,
@@ -95,6 +95,17 @@ class SketchEngineProviderTests(unittest.TestCase):
         self.assertEqual(params["q"], 'q[lemma="run"]')
         self.assertEqual(params["asyn"], 0)
         self.assertEqual(timeout, 30)
+
+    def test_one_attempt_per_query_is_supported(self):
+        worker = QueryWorker(
+            sketch_config(attempts=1), queue.Queue(), threading.Event()
+        )
+        worker.session = FakeSession({"concsize": 42})
+
+        result = worker.fetch_result('[lemma="run"]')
+
+        self.assertEqual(result.successful_attempts, 1)
+        self.assertEqual(len(worker.session.calls), 1)
 
     def test_forms_response_uses_the_authenticated_freqs_endpoint(self):
         payload = {
