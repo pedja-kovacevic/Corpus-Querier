@@ -16,6 +16,7 @@ import pandas as pd
 import requests
 
 from app_identity import APP_VERSION, PeckingBird, apply_window_icon
+from run_control import RunControl
 from rnc_cql_translator import TranslationError, translate_cql
 from rnc_provider import (
     AUTH_CHECK_URL,
@@ -186,11 +187,24 @@ class JobConfig:
 
 
 class QueryWorker(threading.Thread):
-    def __init__(self, config: JobConfig, events: queue.Queue, stop_event: threading.Event):
+    def __init__(
+        self,
+        config: JobConfig,
+        events: queue.Queue,
+        stop_event: threading.Event,
+        run_event: threading.Event | None = None,
+    ):
         super().__init__(daemon=True)
         self.config = config
         self.events = events
         self.stop_event = stop_event
+        self.run_event = run_event or threading.Event()
+        self.run_event.set()
+        self.control = RunControl(
+            self.stop_event,
+            self.run_event,
+            on_paused=lambda: self.emit("paused"),
+        )
         self.form_rows: list[dict] = []
         self.concordance_rows: list[dict] = []
         self._session_headers = {
@@ -199,6 +213,14 @@ class QueryWorker(threading.Thread):
             "User-Agent": f"Corpus-Querier-RNC/{APP_VERSION}",
         }
         self.session = self._new_session()
+
+    def _require_running(self) -> None:
+        if not self.control.wait_until_running():
+            raise InterruptedError
+
+    def _wait(self, seconds: float) -> None:
+        if not self.control.wait(seconds):
+            raise InterruptedError
 
     def _new_session(self) -> requests.Session:
         session = requests.Session()
@@ -243,12 +265,10 @@ class QueryWorker(threading.Thread):
         started = time.monotonic()
 
         for attempt in range(1, self.config.attempts + 1):
-            if self.stop_event.is_set():
-                raise InterruptedError
+            self._require_running()
             transport_retry = 0
             while True:
-                if self.stop_event.is_set():
-                    raise InterruptedError
+                self._require_running()
                 suffix = "" if transport_retry == 0 else f" (network retry {transport_retry})"
                 self.log(f"Attempt {attempt}/{self.config.attempts}{suffix}")
                 self.log(f"POST {BASE_URL}")
@@ -310,12 +330,11 @@ class QueryWorker(threading.Thread):
                     f"Transient connection failure: {failure}\n"
                     f"The remote service is unavailable. Retrying the same required "
                     f"attempt in {delay:g} seconds (network retry {transport_retry}). "
-                    "Press Stop & save to pause safely."
+                    "Use Pause to wait or Stop & save to end safely."
                 )
-                if self.stop_event.wait(delay):
-                    raise InterruptedError
-            if attempt < self.config.attempts and self.stop_event.wait(1):
-                raise InterruptedError
+                self._wait(delay)
+            if attempt < self.config.attempts:
+                self._wait(1)
 
         if len(valid_results) != self.config.attempts:
             raise QueryError(
@@ -510,7 +529,7 @@ class QueryWorker(threading.Thread):
             self.log(f"Prepared {total:,} queries for RNC corpus '{self.config.corpus}'.")
 
             for position, (row, column, expression) in enumerate(tasks, start=1):
-                if self.stop_event.is_set():
+                if not self.control.wait_until_running():
                     break
                 cell = f"{index_to_column_letter(column)}{row + 1}"
                 self.emit("current", position=position, cell=cell, query=expression)
@@ -527,6 +546,8 @@ class QueryWorker(threading.Thread):
                     completed += 1
                     self.emit("result", success=True, hits=result.total_occurrences,
                               attempts=successful_attempts, duration=duration)
+                except InterruptedError:
+                    break
                 except QueryError as error:
                     dataframe.iat[row, column] = "ERROR"
                     failed += 1
@@ -540,8 +561,11 @@ class QueryWorker(threading.Thread):
                           total=total, elapsed=elapsed, eta=eta)
                 if processed % self.config.save_every == 0:
                     self.save(dataframe)
-                if position < total and self.stop_event.wait(self.config.delay):
-                    break
+                if position < total:
+                    try:
+                        self._wait(self.config.delay)
+                    except InterruptedError:
+                        break
 
             self.save(dataframe)
             self.emit("finished", stopped=self.stop_event.is_set(), completed=completed,
@@ -567,6 +591,8 @@ class CorpusQuerierRNCApp(ctk.CTk):
         self.minsize(1120, 820)
         self.events: queue.Queue = queue.Queue()
         self.stop_event = threading.Event()
+        self.run_event = threading.Event()
+        self.run_event.set()
         self.worker: QueryWorker | None = None
         self.total = 0
         self.grid_columnconfigure(1, weight=1)
@@ -619,6 +645,16 @@ class CorpusQuerierRNCApp(ctk.CTk):
         self.stop_button = ctk.CTkButton(header, text="Stop & save", fg_color="#B91C1C",
                                          hover_color="#991B1B", state="disabled", command=self._stop)
         self.stop_button.pack(side="right", padx=(10, 0))
+        self.pause_button = ctk.CTkButton(
+            header,
+            text="⏸  Pause",
+            width=110,
+            fg_color="#B45309",
+            hover_color="#92400E",
+            state="disabled",
+            command=self._toggle_pause,
+        )
+        self.pause_button.pack(side="right", padx=(10, 0))
         self.start_button = ctk.CTkButton(header, text="▶  Start queries", width=160, command=self._start)
         self.start_button.pack(side="right")
 
@@ -891,7 +927,7 @@ class CorpusQuerierRNCApp(ctk.CTk):
         setattr(self, f"{prefix}_advanced", variables)
         for i, (label, key) in enumerate([
             ("Delay (s)", "delay"), ("Timeout (s)", "timeout"),
-            ("Attempts", "attempts"), ("Save every", "save"),
+            ("Attempts/query", "attempts"), ("Save every", "save"),
         ]):
             ctk.CTkLabel(frame, text=label, text_color=("#526070", "#94A3B8")).grid(
                 row=0, column=i * 2, padx=(0 if i == 0 else 14, 6))
@@ -1036,8 +1072,6 @@ class CorpusQuerierRNCApp(ctk.CTk):
             self._number(advanced["attempts"].get(), "Attempts", True),
             self._number(advanced["save"].get(), "Save interval", True),
         )
-        if common[2] < 2:
-            raise ValueError("Attempts must be at least 2; both verification queries are mandatory.")
         output_settings = (
             self._collect_subcorpus(),
             self.output_mode.get(),
@@ -1083,13 +1117,48 @@ class CorpusQuerierRNCApp(ctk.CTk):
             messagebox.showerror(APP_NAME, str(error))
             return
         self.stop_event.clear()
+        self.run_event.set()
         self._reset_monitor()
         self._set_running(True)
-        self.worker = QueryWorker(config, self.events, self.stop_event)
+        self.worker = QueryWorker(
+            config,
+            self.events,
+            self.stop_event,
+            self.run_event,
+        )
         self.worker.start()
+
+    def _toggle_pause(self) -> None:
+        if not self.worker or not self.worker.is_alive():
+            return
+        if self.run_event.is_set():
+            self.run_event.clear()
+            self.pecking_bird.set_running(False)
+            self.pause_button.configure(text="▶  Resume")
+            self.status_pill.configure(
+                text="●  PAUSING",
+                fg_color=("#FEF3C7", "#4A3510"),
+                text_color=("#92400E", "#FCD34D"),
+            )
+            self._append_log(
+                "\nPause requested. The active request will finish; no new "
+                "request will start until Resume is selected.\n"
+            )
+        else:
+            self.run_event.set()
+            self.pecking_bird.set_running(True)
+            self.pause_button.configure(text="⏸  Pause")
+            self.status_pill.configure(
+                text="●  RUNNING",
+                fg_color=("#DBEAFE", "#17345C"),
+                text_color=("#1D4ED8", "#93C5FD"),
+            )
+            self._append_log("\nRun resumed.\n")
 
     def _stop(self) -> None:
         self.stop_event.set()
+        self.run_event.set()
+        self.pause_button.configure(state="disabled")
         self.status_pill.configure(text="●  STOPPING", fg_color=("#FEF3C7", "#4A3510"),
                                    text_color=("#92400E", "#FCD34D"))
         self._append_log("\nStop requested. The current request will finish, then results will be saved.\n")
@@ -1098,10 +1167,16 @@ class CorpusQuerierRNCApp(ctk.CTk):
         self.pecking_bird.set_running(running)
         self.start_button.configure(state="disabled" if running else "normal")
         self.stop_button.configure(state="normal" if running else "disabled")
+        self.pause_button.configure(
+            state="normal" if running else "disabled",
+            text="⏸  Pause",
+        )
         self.tabs.configure(state="disabled" if running else "normal")
         if running:
             self.status_pill.configure(text="●  RUNNING", fg_color=("#DBEAFE", "#17345C"),
                                        text_color=("#1D4ED8", "#93C5FD"))
+        else:
+            self.run_event.set()
 
     def _reset_monitor(self) -> None:
         self.progress.set(0)
@@ -1132,6 +1207,15 @@ class CorpusQuerierRNCApp(ctk.CTk):
                 elif kind == "current":
                     self.current_label.configure(
                         text=f'{payload["position"]:,}/{self.total:,} · {payload["cell"]} · {payload["query"]}'
+                    )
+                elif kind == "paused":
+                    self.status_pill.configure(
+                        text="●  PAUSED",
+                        fg_color=("#FEF3C7", "#4A3510"),
+                        text_color=("#92400E", "#FCD34D"),
+                    )
+                    self.current_label.configure(
+                        text="Paused safely before the next network request."
                     )
                 elif kind == "progress":
                     ratio = payload["processed"] / payload["total"]
@@ -1167,6 +1251,7 @@ class CorpusQuerierRNCApp(ctk.CTk):
             if not messagebox.askyesno(APP_NAME, "A run is active. Stop, save, and close when possible?"):
                 return
             self.stop_event.set()
+            self.run_event.set()
         self.destroy()
 
 

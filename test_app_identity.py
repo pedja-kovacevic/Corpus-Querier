@@ -11,7 +11,7 @@ from app_identity import (
 
 class AppIdentityTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION, "3.1.4")
+        self.assertEqual(APP_VERSION, "3.2.0")
 
     def test_bird_layer_is_nonempty_rgba(self):
         image = _load_bird_layer()
