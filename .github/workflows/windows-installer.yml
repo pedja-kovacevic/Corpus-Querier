@@ -2,6 +2,11 @@ name: Build Windows installer
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to attach the installer to (optional)
+        required: false
+        default: ""
   push:
     tags:
       - "v*"
@@ -37,8 +42,9 @@ jobs:
           path: installer-output/Corpus-Querier-Setup.exe
           if-no-files-found: error
       - name: Attach installer to GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
           files: installer-output/Corpus-Querier-Setup.exe
           generate_release_notes: true
