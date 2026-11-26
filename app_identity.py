@@ -11,7 +11,7 @@ from PIL import Image, ImageChops, ImageDraw
 
 
 APP_NAME = "Corpus Querier"
-APP_VERSION = "3.2.0"
+APP_VERSION = "3.3.0"
 
 
 def resource_path(relative_path: str) -> Path:
