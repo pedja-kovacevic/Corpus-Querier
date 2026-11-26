@@ -8,6 +8,7 @@ from corpus_querier_sketchengine import (
     CorpusQuerierSketchEngineApp,
     SKETCH_ENGINE_ROOT,
 )
+from run_control import RateLimitWindow, RequestRateLimiter
 
 
 class FakeResponse:
@@ -32,6 +33,28 @@ class FakeSession:
     def get(self, endpoint, *, params, timeout):
         self.calls.append((endpoint, params, timeout))
         return FakeResponse(self.payload)
+
+
+class MutableClock:
+    def __init__(self, value):
+        self.value = float(value)
+
+    def __call__(self):
+        return self.value
+
+
+class AdvancingControl:
+    def __init__(self, clock):
+        self.clock = clock
+        self.pauses = []
+
+    def wait_until_running(self):
+        return True
+
+    def automatic_pause(self, seconds):
+        self.pauses.append(seconds)
+        self.clock.value += seconds
+        return "elapsed"
 
 
 def sketch_config(output_mode="total", attempts=2):
@@ -90,6 +113,10 @@ class SketchEngineProviderTests(unittest.TestCase):
         self.assertEqual(result.total_hits, 42)
         self.assertEqual(result.successful_attempts, 2)
         self.assertEqual(len(worker.session.calls), 2)
+        self.assertEqual(
+            worker.rate_limiter.inspect().counts["minute"],
+            2,
+        )
         endpoint, params, timeout = worker.session.calls[0]
         self.assertEqual(endpoint, f"{SKETCH_ENGINE_ROOT}/view")
         self.assertEqual(params["q"], 'q[lemma="run"]')
@@ -106,6 +133,10 @@ class SketchEngineProviderTests(unittest.TestCase):
 
         self.assertEqual(result.successful_attempts, 1)
         self.assertEqual(len(worker.session.calls), 1)
+        self.assertEqual(
+            worker.rate_limiter.inspect().counts["minute"],
+            1,
+        )
 
     def test_forms_response_uses_the_authenticated_freqs_endpoint(self):
         payload = {
@@ -134,6 +165,32 @@ class SketchEngineProviderTests(unittest.TestCase):
             worker.session.calls[0][0],
             f"{SKETCH_ENGINE_ROOT}/freqs",
         )
+
+    def test_worker_pauses_until_the_rolling_window_is_safe(self):
+        events = queue.Queue()
+        worker = QueryWorker(
+            sketch_config(attempts=1), events, threading.Event()
+        )
+        clock = MutableClock(1_000.0)
+        worker.rate_limiter = RequestRateLimiter(
+            (RateLimitWindow("minute", 60, 20),),
+            clock=clock,
+        )
+        for _ in range(17):
+            worker.rate_limiter.record_request(990.0)
+        control = AdvancingControl(clock)
+        worker.control = control
+
+        worker._wait_for_rate_capacity()
+
+        self.assertEqual(len(control.pauses), 1)
+        self.assertAlmostEqual(control.pauses[0], 50.05)
+        event_names = []
+        while not events.empty():
+            event_names.append(events.get_nowait()[0])
+        self.assertIn("rate_warning", event_names)
+        self.assertIn("rate_paused", event_names)
+        self.assertIn("rate_resumed", event_names)
 
 
 if __name__ == "__main__":

@@ -19,7 +19,11 @@ from app_identity import APP_VERSION, PeckingBird, apply_window_icon
 from run_control import (
     AUTOMATIC_PAUSE_SECONDS,
     CONSECUTIVE_FAILURE_LIMIT,
+    RATE_LIMIT_PAUSE_MARGIN,
+    RATE_LIMIT_WARNING_MARGIN,
     ConsecutiveFailureGuard,
+    RateLimitWindow,
+    RequestRateLimiter,
     RunControl,
 )
 
@@ -27,6 +31,12 @@ APP_NAME = "Corpus Querier — NoSketch Engine"
 VIEW_URL = "https://www.clarin.si/ske/bonito/run.cgi/view"
 FREQS_URL = "https://www.clarin.si/ske/bonito/run.cgi/freqs"
 DEFAULT_MIN_FORM_FREQUENCY = 1
+DEFAULT_REQUESTS_PER_MINUTE = 100
+DEFAULT_REQUESTS_PER_HOUR = 900
+DEFAULT_REQUESTS_PER_DAY = 2_000
+RATE_LIMIT_HISTORY_PATH = (
+    Path.home() / ".corpus_querier" / "rate_limit_history.json"
+)
 COMMON_CORPORA = ["srwac", "hrwac22_rft1", "bswac", "slwac", "mk_wac"]
 PLACEHOLDER_RE = re.compile(r"\{(?:WORD|LEMMA)\}|\b(?:WORD|LEMMA)\b")
 OUTPUT_MODES = {
@@ -111,6 +121,11 @@ class JobConfig:
     view_url: str = VIEW_URL
     freqs_url: str = FREQS_URL
     synchronous: bool = False
+    requests_per_minute: int = DEFAULT_REQUESTS_PER_MINUTE
+    requests_per_hour: int = DEFAULT_REQUESTS_PER_HOUR
+    requests_per_day: int = DEFAULT_REQUESTS_PER_DAY
+    rate_limit_history_path: Path | None = None
+    rate_limit_key: str = ""
 
 
 @dataclass
@@ -166,6 +181,25 @@ class QueryWorker(threading.Thread):
         self.query_records: list[dict] = []
         self.form_records: list[dict] = []
         self.run_started_at = datetime.now().astimezone()
+        history_key = config.rate_limit_key or (
+            f"{config.provider_name}:"
+            f"{urllib.parse.urlparse(config.view_url).netloc}"
+        )
+        self.rate_limiter = RequestRateLimiter(
+            (
+                RateLimitWindow(
+                    "minute", 60, config.requests_per_minute
+                ),
+                RateLimitWindow(
+                    "hour", 60 * 60, config.requests_per_hour
+                ),
+                RateLimitWindow(
+                    "day", 24 * 60 * 60, config.requests_per_day
+                ),
+            ),
+            history_path=config.rate_limit_history_path,
+            history_key=history_key,
+        )
 
     def _require_running(self) -> None:
         if not self.control.wait_until_running():
@@ -195,6 +229,77 @@ class QueryWorker(threading.Thread):
         else:
             self.log("The automatic safety pause was interrupted. Resuming queries.")
         return True
+
+    def _wait_for_rate_capacity(self) -> None:
+        """Pause before a request when any rolling quota reaches its reserve."""
+
+        while True:
+            self._require_running()
+            snapshot = self.rate_limiter.inspect()
+
+            for window_name in snapshot.warnings:
+                remaining = snapshot.remaining[window_name]
+                count = snapshot.counts[window_name]
+                limit = next(
+                    window.limit
+                    for window in self.rate_limiter.windows
+                    if window.name == window_name
+                )
+                self.log(
+                    "Rate-limit warning: "
+                    f"{count:,}/{limit:,} requests used in the rolling "
+                    f"{window_name} window; {remaining:,} remain."
+                )
+                self.emit(
+                    "rate_warning",
+                    window=window_name,
+                    count=count,
+                    limit=limit,
+                    remaining=remaining,
+                )
+
+            if snapshot.pause_until is None:
+                return
+
+            now = self.rate_limiter.clock()
+            seconds = max(0.05, snapshot.pause_until - now)
+            windows = ", ".join(snapshot.pause_windows)
+            resume_text = datetime.fromtimestamp(
+                snapshot.pause_until
+            ).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+            details = "; ".join(
+                f"{name}: {snapshot.remaining[name]} remaining"
+                for name in snapshot.pause_windows
+            )
+            self.log(
+                "Automatic rate-limit pause: the configured reserve of "
+                f"{RATE_LIMIT_PAUSE_MARGIN} requests has been reached "
+                f"({details}). The next safe check is at {resume_text}. "
+                "Stop & save remains available."
+            )
+            self.emit(
+                "rate_paused",
+                seconds=seconds,
+                resume_at=snapshot.pause_until,
+                windows=windows,
+                details=details,
+            )
+            reason = self.control.automatic_pause(seconds)
+            if reason == "stopped":
+                raise InterruptedError
+            if reason == "resumed":
+                self.log(
+                    "Resume was requested before the quota window cleared; "
+                    "checking the rate-limit reserve again."
+                )
+
+            # Recalculate all rolling windows. A manual early resume cannot
+            # bypass the three-request safety reserve.
+            refreshed = self.rate_limiter.inspect()
+            if refreshed.pause_until is None:
+                self.emit("rate_resumed")
+                self.log("Rate-limit reserve restored. Resuming queries.")
+                return
 
     def emit(self, kind: str, **payload) -> None:
         self.events.put((kind, payload))
@@ -308,6 +413,8 @@ class QueryWorker(threading.Thread):
             self.log(f"Attempt {attempt}/{self.config.attempts}")
             self.log(f"Querying: {full_url}")
             try:
+                self._wait_for_rate_capacity()
+                self.rate_limiter.record_request()
                 response = self.session.get(
                     endpoint,
                     params=params,
@@ -362,6 +469,8 @@ class QueryWorker(threading.Thread):
                     )
                 else:
                     self.log(f"Hits on attempt {attempt}: {total:,}")
+            except InterruptedError:
+                raise
             except Exception as error:
                 last_error = error
                 self.log(f"Error: {error}")
@@ -494,6 +603,11 @@ class QueryWorker(threading.Thread):
             ("Attempts per query", self.config.attempts),
             ("Delay between queries (s)", self.config.delay),
             ("Request timeout (s)", self.config.timeout),
+            ("Request limit per minute", self.config.requests_per_minute),
+            ("Request limit per hour", self.config.requests_per_hour),
+            ("Request limit per day", self.config.requests_per_day),
+            ("Rate-limit warning reserve", RATE_LIMIT_WARNING_MARGIN),
+            ("Rate-limit pause reserve", RATE_LIMIT_PAUSE_MARGIN),
             ("Started", self.run_started_at.isoformat(timespec="seconds")),
             ("Last saved", datetime.now().astimezone().isoformat(timespec="seconds")),
         ]
@@ -524,6 +638,23 @@ class QueryWorker(threading.Thread):
                 raise ValueError("No valid CQL queries were found.")
             self.emit("started", total=total)
             self.log(f"Prepared {total:,} queries for corpus '{self.config.corpus}'.")
+            rate_snapshot = self.rate_limiter.inspect()
+            self.log(
+                "Rolling request protection: "
+                f"{self.config.requests_per_minute:,}/minute, "
+                f"{self.config.requests_per_hour:,}/hour, "
+                f"{self.config.requests_per_day:,}/day. "
+                f"Warning reserve: {RATE_LIMIT_WARNING_MARGIN}; "
+                f"automatic-pause reserve: {RATE_LIMIT_PAUSE_MARGIN}."
+            )
+            self.log(
+                "Current recorded usage — "
+                + ", ".join(
+                    f"{name}: {rate_snapshot.counts[name]:,}"
+                    for name in ("minute", "hour", "day")
+                )
+                + "."
+            )
 
             for position, task in enumerate(tasks, start=1):
                 if not self.control.wait_until_running():
@@ -670,6 +801,7 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         self.run_event = threading.Event()
         self.run_event.set()
         self.auto_pause_until = 0.0
+        self.auto_pause_reason = ""
         self.worker: QueryWorker | None = None
         self.total = 0
         self.output_mode = ctk.StringVar(value="Total frequency")
@@ -751,7 +883,7 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
             self._build_authentication(main, row=1)
 
         tabs_row = 2 if self.requires_api_key else 1
-        self.tabs = ctk.CTkTabview(main, height=390)
+        self.tabs = ctk.CTkTabview(main, height=420)
         self.tabs.grid(row=tabs_row, column=0, sticky="ew")
         existing = self.tabs.add("Existing CQL spreadsheet")
         generated = self.tabs.add("Generate CQLs")
@@ -954,6 +1086,9 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         variables = {
             "delay": ctk.StringVar(value="5"), "timeout": ctk.StringVar(value="30"),
             "attempts": ctk.StringVar(value="2"), "save": ctk.StringVar(value="25"),
+            "limit_minute": ctk.StringVar(value=str(DEFAULT_REQUESTS_PER_MINUTE)),
+            "limit_hour": ctk.StringVar(value=str(DEFAULT_REQUESTS_PER_HOUR)),
+            "limit_day": ctk.StringVar(value=str(DEFAULT_REQUESTS_PER_DAY)),
             "min_frequency": ctk.StringVar(value=str(DEFAULT_MIN_FORM_FREQUENCY)),
             "case_sensitive": ctk.BooleanVar(value=True)}
         setattr(self, f"{prefix}_advanced", variables)
@@ -980,6 +1115,43 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
             offvalue=False,
         )
         case_switch.grid(row=1, column=2, columnspan=4, padx=(14, 0), pady=(10, 0), sticky="w")
+        for i, (label, key) in enumerate(
+            [
+                ("Requests/min", "limit_minute"),
+                ("Requests/hour", "limit_hour"),
+                ("Requests/day", "limit_day"),
+            ]
+        ):
+            ctk.CTkLabel(
+                frame,
+                text=label,
+                text_color=("#526070", "#94A3B8"),
+            ).grid(
+                row=2,
+                column=i * 2,
+                padx=(0 if i == 0 else 14, 6),
+                pady=(10, 0),
+            )
+            ctk.CTkEntry(
+                frame,
+                textvariable=variables[key],
+                width=72,
+            ).grid(row=2, column=i * 2 + 1, pady=(10, 0))
+        ctk.CTkLabel(
+            frame,
+            text=(
+                f"Warn at {RATE_LIMIT_WARNING_MARGIN} remaining · "
+                f"pause at {RATE_LIMIT_PAUSE_MARGIN} remaining"
+            ),
+            text_color=("#526070", "#94A3B8"),
+        ).grid(
+            row=2,
+            column=6,
+            columnspan=2,
+            padx=(14, 0),
+            pady=(10, 0),
+            sticky="w",
+        )
         self.form_option_widgets.extend([min_frequency_entry, case_switch])
         self._output_mode_changed(self.output_mode.get())
 
@@ -1039,12 +1211,39 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         save_interval = self._number(
             advanced["save"].get(), "Save interval", True
         )
+        requests_per_minute = self._number(
+            advanced["limit_minute"].get(), "Requests per minute", True
+        )
+        requests_per_hour = self._number(
+            advanced["limit_hour"].get(), "Requests per hour", True
+        )
+        requests_per_day = self._number(
+            advanced["limit_day"].get(), "Requests per day", True
+        )
+        for label, limit in (
+            ("Requests per minute", requests_per_minute),
+            ("Requests per hour", requests_per_hour),
+            ("Requests per day", requests_per_day),
+        ):
+            if limit <= RATE_LIMIT_WARNING_MARGIN:
+                raise ValueError(
+                    f"{label} must be greater than "
+                    f"{RATE_LIMIT_WARNING_MARGIN}."
+                )
         provider_settings = (
             self.provider_name,
             api_key,
             self.view_url,
             self.freqs_url,
             self.synchronous_queries,
+            requests_per_minute,
+            requests_per_hour,
+            requests_per_day,
+            RATE_LIMIT_HISTORY_PATH,
+            (
+                f"{self.provider_name}:"
+                f"{urllib.parse.urlparse(self.view_url).netloc}"
+            ),
         )
         if generated:
             input_text = self.generated_input.get().strip().strip('"')
@@ -1081,6 +1280,7 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         self.stop_event.clear()
         self.run_event.set()
         self.auto_pause_until = 0.0
+        self.auto_pause_reason = ""
         self._reset_monitor()
         self._set_running(True)
         self.worker = QueryWorker(
@@ -1109,7 +1309,9 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
             )
         else:
             automatic = self.auto_pause_until > 0
+            automatic_reason = self.auto_pause_reason
             self.auto_pause_until = 0.0
+            self.auto_pause_reason = ""
             self.run_event.set()
             self.pecking_bird.set_running(True)
             self.pause_button.configure(text="⏸  Pause")
@@ -1118,17 +1320,22 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
                 fg_color=("#DBEAFE", "#17345C"),
                 text_color=("#1D4ED8", "#93C5FD"),
             )
-            message = (
-                "Automatic safety pause interrupted by the user."
-                if automatic
-                else "Run resumed."
-            )
+            if automatic_reason == "rate_limit":
+                message = (
+                    "Resume requested. The configured rate-limit reserve "
+                    "will be checked before another request is sent."
+                )
+            elif automatic:
+                message = "Automatic safety pause interrupted by the user."
+            else:
+                message = "Run resumed."
             self._append_log(f"\n{message}\n")
 
     def _stop(self) -> None:
         self.stop_event.set()
         self.run_event.set()
         self.auto_pause_until = 0.0
+        self.auto_pause_reason = ""
         self.pause_button.configure(state="disabled")
         self.status_pill.configure(text="●  STOPPING", fg_color=("#FEF3C7", "#4A3510"), text_color=("#92400E", "#FCD34D"))
         self._append_log("\nStop requested. The current request will finish, then results will be saved.\n")
@@ -1153,6 +1360,7 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
         else:
             self.run_event.set()
             self.auto_pause_until = 0.0
+            self.auto_pause_reason = ""
 
     def _update_auto_pause_status(self) -> None:
         if self.auto_pause_until <= 0 or self.run_event.is_set():
@@ -1194,6 +1402,7 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
                         )
                 elif kind == "auto_paused":
                     self.auto_pause_until = payload["resume_at"]
+                    self.auto_pause_reason = "failures"
                     self.pecking_bird.set_running(False)
                     self.pause_button.configure(text="▶  Resume")
                     self.current_label.configure(
@@ -1205,6 +1414,41 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
                     self._update_auto_pause_status()
                 elif kind == "auto_resumed":
                     self.auto_pause_until = 0.0
+                    self.auto_pause_reason = ""
+                    if self.run_event.is_set():
+                        self.pecking_bird.set_running(True)
+                        self.pause_button.configure(text="⏸  Pause")
+                        self.status_pill.configure(
+                            text="●  RUNNING",
+                            fg_color=("#DBEAFE", "#17345C"),
+                            text_color=("#1D4ED8", "#93C5FD"),
+                        )
+                elif kind == "rate_warning":
+                    self.current_label.configure(
+                        text=(
+                            "Rate-limit warning · "
+                            f'{payload["remaining"]:,} requests remain in '
+                            f'the rolling {payload["window"]} window.'
+                        )
+                    )
+                elif kind == "rate_paused":
+                    self.auto_pause_until = payload["resume_at"]
+                    self.auto_pause_reason = "rate_limit"
+                    self.pecking_bird.set_running(False)
+                    self.pause_button.configure(text="▶  Resume")
+                    resume_text = datetime.fromtimestamp(
+                        payload["resume_at"]
+                    ).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+                    self.current_label.configure(
+                        text=(
+                            "Rate-limit safety pause · next safe check: "
+                            f"{resume_text}."
+                        )
+                    )
+                    self._update_auto_pause_status()
+                elif kind == "rate_resumed":
+                    self.auto_pause_until = 0.0
+                    self.auto_pause_reason = ""
                     if self.run_event.is_set():
                         self.pecking_bird.set_running(True)
                         self.pause_button.configure(text="⏸  Pause")

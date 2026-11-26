@@ -1,7 +1,7 @@
-# Corpus Querier 3.2
+# Corpus Querier 3.3
 
 Corpus Querier is an independent, cross-platform desktop application for
-reproducible batch corpus research. Version 3.2 combines NoSketch Engine,
+reproducible batch corpus research. Version 3.3 combines NoSketch Engine,
 the official Sketch Engine API, and the Russian National Corpus public API in
 one interface.
 
@@ -19,7 +19,7 @@ and download the package for your system:
 | Platform | Download |
 |---|---|
 | Windows | `Corpus-Querier-Setup.exe` |
-| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.2.0_amd64.deb` |
+| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.3.0_amd64.deb` |
 | Linux portable | `Corpus-Querier-x86_64.AppImage` |
 | macOS Apple Silicon | `Corpus-Querier-macOS-arm64.dmg` |
 | macOS Intel | `Corpus-Querier-macOS-x86_64.dmg` |
@@ -27,7 +27,7 @@ and download the package for your system:
 The installers contain the application and its Python dependencies. End users
 do not need Python, PowerShell, Visual Studio Code or a terminal.
 
-## What version 3.2 contains
+## What version 3.3 contains
 
 ### Shared capabilities
 
@@ -40,13 +40,20 @@ do not need Python, PowerShell, Visual Studio Code or a terminal.
 - progress, elapsed time and ETA;
 - **Pause / Resume** between network requests, without losing the current run;
 - periodic saving and **Stop & save**, including while paused;
+- configurable rolling request limits under **Advanced options**, prefilled
+  with `100/minute`, `900/hour` and `2,000/day`;
+- a warning when only 10 requests remain in any rolling limit window and an
+  automatic pause when only three remain, with the next safe check shown in
+  the interface;
+- persistent request accounting across app restarts so reopening Corpus
+  Querier does not silently reset the daily counter;
 - a 24-hour safety pause after 10 consecutive failed NoSketch Engine or Sketch
   Engine queries; the user may resume earlier or stop and save;
 - capitalization grouping and minimum-frequency thresholds where forms are
   available;
 - Windows, Linux and macOS packaging.
 
-Version 3.2 uses a shared visual identity on every platform: a stylized data
+Version 3.3 uses a shared visual identity on every platform: a stylized data
 bird pecking a highlighted point from a corpus surface. The larger in-app bird
 animates only while a query run is active, and the contact point lights briefly
 at each peck.
@@ -77,6 +84,22 @@ Example:
 - exact total frequencies and available form-frequency output;
 - the same retry, progress, periodic-save and spreadsheet workflows as the
   NoSketch Engine module.
+
+The default Sketch Engine request limits follow its published
+[Fair Use Policy](https://www.sketchengine.eu/fair-use-policy/): 100 requests
+in any rolling 60 seconds, 900 in any rolling 60 minutes and 2,000 in any
+rolling 24 hours. The app counts actual HTTP requests, so two attempts for one
+query consume two requests. Limits can be edited under Advanced options when
+an account has a different quota.
+
+CLARIN.SI does not publish an equivalent numeric quota for its public NoSketch
+Engine service. The NoSketch module therefore starts with the same editable
+defaults; they are a client-side safety profile, not a claim about that
+server's contractual limit.
+
+The persistent counter covers requests sent by Corpus Querier itself. Requests
+made simultaneously in a provider's web interface or by another API client
+cannot be observed locally and therefore are not included.
 
 Example:
 
@@ -164,13 +187,15 @@ The release is checked with the following automated and manual tests:
    - total plus forms/frequencies mode;
    - capitalization grouping and a threshold greater than one;
    - both one-attempt and two-attempt runs;
-   - pause, resume and stop-while-paused behaviour.
+   - pause, resume and stop-while-paused behaviour;
+   - rolling-limit warnings and automatic quota pauses.
 3. **Sketch Engine smoke test**
    - API-key validation;
    - one BNC exact-total query;
    - one generated-template run;
    - both one-attempt and two-attempt runs;
-   - automatic safety pause after 10 simulated consecutive failures.
+   - automatic safety pause after 10 simulated consecutive failures;
+   - persistent minute/hour/day request accounting and exact resume time.
 4. **RNC smoke test**
    - token validation;
    - one literal lemma query;
@@ -203,7 +228,7 @@ is sufficient once the shared source build has passed automated tests.
 
 The GitHub Actions workflows can be run manually against a development branch.
 They upload installable artifacts without publishing a release. Versioned
-packages are attached automatically when a release tag such as `v3.2.0` is
+packages are attached automatically when a release tag such as `v3.3.0` is
 pushed.
 
 ## Service independence and acknowledgment
