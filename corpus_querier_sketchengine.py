@@ -28,6 +28,7 @@ class CorpusQuerierSketchEngineApp(CorpusQuerierNoSketchApp):
     freqs_url = f"{SKETCH_ENGINE_ROOT}/freqs"
     corp_info_url = f"{SKETCH_ENGINE_ROOT}/corp_info"
     synchronous_queries = True
+    allow_rate_limit_manual_override = False
 
     def __init__(self) -> None:
         super().__init__()

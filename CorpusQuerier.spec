@@ -61,8 +61,8 @@ if sys.platform == "darwin":
         icon="assets/corpus-querier.png",
         info_plist={
             "CFBundleDisplayName": "Corpus Querier",
-            "CFBundleShortVersionString": "3.3.0",
-            "CFBundleVersion": "3.3.0",
+            "CFBundleShortVersionString": "3.3.1",
+            "CFBundleVersion": "3.3.1",
             "NSHighResolutionCapable": True,
         },
     )

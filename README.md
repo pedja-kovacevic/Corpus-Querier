@@ -19,7 +19,7 @@ and download the package for your system:
 | Platform | Download |
 |---|---|
 | Windows | `Corpus-Querier-Setup.exe` |
-| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.3.0_amd64.deb` |
+| Linux (Debian/Ubuntu/MX Linux) | `corpus-querier_3.3.1_amd64.deb` |
 | Linux portable | `Corpus-Querier-x86_64.AppImage` |
 | macOS Apple Silicon | `Corpus-Querier-macOS-arm64.dmg` |
 | macOS Intel | `Corpus-Querier-macOS-x86_64.dmg` |
@@ -228,7 +228,7 @@ is sufficient once the shared source build has passed automated tests.
 
 The GitHub Actions workflows can be run manually against a development branch.
 They upload installable artifacts without publishing a release. Versioned
-packages are attached automatically when a release tag such as `v3.3.0` is
+packages are attached automatically when a release tag such as `v3.3.1` is
 pushed.
 
 ## Service independence and acknowledgment
