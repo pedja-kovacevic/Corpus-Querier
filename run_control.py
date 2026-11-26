@@ -188,6 +188,13 @@ class RequestRateLimiter:
         self.timestamps.append(now)
         self._save()
 
+    def clear_history(self) -> None:
+        """Forget this provider's locally recorded request history."""
+
+        self.timestamps.clear()
+        self._warned_windows.clear()
+        self._save()
+
 
 class ConsecutiveFailureGuard:
     """Count consecutive failures and signal when a safety pause is due."""

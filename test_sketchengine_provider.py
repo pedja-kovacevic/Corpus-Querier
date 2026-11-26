@@ -57,6 +57,15 @@ class AdvancingControl:
         return "elapsed"
 
 
+class ResumeThenAdvanceControl(AdvancingControl):
+    def automatic_pause(self, seconds):
+        self.pauses.append(seconds)
+        if len(self.pauses) == 1:
+            return "resumed"
+        self.clock.value += seconds
+        return "elapsed"
+
+
 def sketch_config(output_mode="total", attempts=2):
     return JobConfig(
         mode="generated",
@@ -191,6 +200,24 @@ class SketchEngineProviderTests(unittest.TestCase):
         self.assertIn("rate_warning", event_names)
         self.assertIn("rate_paused", event_names)
         self.assertIn("rate_resumed", event_names)
+
+    def test_manual_resume_does_not_override_sketch_engine_limit(self):
+        worker = QueryWorker(
+            sketch_config(attempts=1), queue.Queue(), threading.Event()
+        )
+        clock = MutableClock(1_800_000_000.0)
+        worker.rate_limiter = RequestRateLimiter(
+            (RateLimitWindow("minute", 60, 20),),
+            clock=clock,
+        )
+        for _ in range(17):
+            worker.rate_limiter.record_request(1_799_999_990.0)
+        control = ResumeThenAdvanceControl(clock)
+        worker.control = control
+
+        worker._wait_for_rate_capacity()
+
+        self.assertEqual(len(control.pauses), 2)
 
 
 if __name__ == "__main__":

@@ -126,6 +126,7 @@ class JobConfig:
     requests_per_day: int = DEFAULT_REQUESTS_PER_DAY
     rate_limit_history_path: Path | None = None
     rate_limit_key: str = ""
+    allow_rate_limit_override: bool = False
 
 
 @dataclass
@@ -288,6 +289,14 @@ class QueryWorker(threading.Thread):
             if reason == "stopped":
                 raise InterruptedError
             if reason == "resumed":
+                if self.config.allow_rate_limit_override:
+                    self.rate_limiter.clear_history()
+                    self.emit("rate_resumed", overridden=True)
+                    self.log(
+                        "NoSketch rate-limit pause manually overridden. "
+                        "Resuming immediately with a fresh local request count."
+                    )
+                    return
                 self.log(
                     "Resume was requested before the quota window cleared; "
                     "checking the rate-limit reserve again."
@@ -781,6 +790,7 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
     freqs_url = FREQS_URL
     corp_info_url = ""
     synchronous_queries = False
+    allow_rate_limit_manual_override = True
 
     def __init__(self):
         super().__init__(className="CorpusQuerier")
@@ -1244,6 +1254,7 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
                 f"{self.provider_name}:"
                 f"{urllib.parse.urlparse(self.view_url).netloc}"
             ),
+            self.allow_rate_limit_manual_override,
         )
         if generated:
             input_text = self.generated_input.get().strip().strip('"')
@@ -1321,10 +1332,16 @@ class CorpusQuerierNoSketchApp(ctk.CTk):
                 text_color=("#1D4ED8", "#93C5FD"),
             )
             if automatic_reason == "rate_limit":
-                message = (
-                    "Resume requested. The configured rate-limit reserve "
-                    "will be checked before another request is sent."
-                )
+                if self.allow_rate_limit_manual_override:
+                    message = (
+                        "NoSketch rate-limit pause manually overridden. "
+                        "Resuming immediately."
+                    )
+                else:
+                    message = (
+                        "Resume requested. The configured rate-limit reserve "
+                        "will be checked before another request is sent."
+                    )
             elif automatic:
                 message = "Automatic safety pause interrupted by the user."
             else:
