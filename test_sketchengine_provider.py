@@ -171,13 +171,13 @@ class SketchEngineProviderTests(unittest.TestCase):
         worker = QueryWorker(
             sketch_config(attempts=1), events, threading.Event()
         )
-        clock = MutableClock(1_000.0)
+        clock = MutableClock(1_800_000_000.0)
         worker.rate_limiter = RequestRateLimiter(
             (RateLimitWindow("minute", 60, 20),),
             clock=clock,
         )
         for _ in range(17):
-            worker.rate_limiter.record_request(990.0)
+            worker.rate_limiter.record_request(1_799_999_990.0)
         control = AdvancingControl(clock)
         worker.control = control
 
